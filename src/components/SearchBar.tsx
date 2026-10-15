@@ -1,7 +1,8 @@
 import { MotiView } from 'moti';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { newSessionToken, retrievePlace, searchPlaces, type PlaceResult } from '../services/mapbox';
+import type { PlaceResult } from '../services/mapbox';
+import { autocomplete, newSessionToken, placeDetails } from '../services/googlePlaces';
 import { colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 
@@ -30,7 +31,7 @@ export function SearchBar({ near, onSelect }: Props) {
     setBusy(true);
     const timer = setTimeout(async () => {
       try {
-        const found = await searchPlaces(q, session.current, near ?? undefined);
+        const found = await autocomplete(q, session.current, near);
         if (!active) return;
         setResults(found);
         setStatus(found.length ? null : `No places match "${q}".`);
@@ -51,8 +52,8 @@ export function SearchBar({ near, onSelect }: Props) {
 
   const choose = async (p: PlaceResult) => {
     try {
-      const full = p.coord ? p : await retrievePlace(p.mapboxId!, session.current);
-      session.current = newSessionToken(); // a completed selection ends the session
+      const full = await placeDetails(p.placeId!, session.current);
+      session.current = newSessionToken(); // a finished selection ends the session
       onSelect(full);
       setQuery('');
       setResults([]);
@@ -117,7 +118,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
-    maxHeight: 320,
+    maxHeight: 340,
   },
   row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.border },
   name: { color: colors.text, fontWeight: '600' },
