@@ -1,0 +1,125 @@
+import { MotiView } from 'moti';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { newSessionToken, retrievePlace, searchPlaces, type PlaceResult } from '../services/mapbox';
+import { colors, radius } from '../theme/colors';
+import type { LngLat } from '../types';
+
+type Props = {
+  near: LngLat | null;
+  onSelect: (place: PlaceResult) => void;
+};
+
+export function SearchBar({ near, onSelect }: Props) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PlaceResult[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const session = useRef(newSessionToken());
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setStatus(null);
+      setBusy(false);
+      return;
+    }
+
+    let active = true;
+    setBusy(true);
+    const timer = setTimeout(async () => {
+      try {
+        const found = await searchPlaces(q, session.current, near ?? undefined);
+        if (!active) return;
+        setResults(found);
+        setStatus(found.length ? null : `No places match "${q}".`);
+      } catch (e: any) {
+        if (!active) return;
+        setResults([]);
+        setStatus(`Search error: ${e.message}`);
+      } finally {
+        if (active) setBusy(false);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query, near]);
+
+  const choose = async (p: PlaceResult) => {
+    try {
+      const full = p.coord ? p : await retrievePlace(p.mapboxId!, session.current);
+      session.current = newSessionToken(); // a completed selection ends the session
+      onSelect(full);
+      setQuery('');
+      setResults([]);
+      setStatus(null);
+    } catch (e: any) {
+      setStatus(`Could not open that place: ${e.message}`);
+    }
+  };
+
+  return (
+    <View>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search places"
+        placeholderTextColor={colors.muted}
+        returnKeyType="search"
+        style={styles.input}
+      />
+      {busy && <Text style={styles.hint}>Searching…</Text>}
+      {!busy && status && <Text style={styles.hint}>{status}</Text>}
+
+      {results.length > 0 && (
+        <MotiView
+          from={{ opacity: 0, translateY: -8 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 220 }}
+          style={styles.list}
+        >
+          {results.map((p) => (
+            <Pressable key={p.id} onPress={() => choose(p)} style={styles.row}>
+              <Text style={styles.name}>{p.name}</Text>
+              {!!p.address && (
+                <Text style={styles.addr} numberOfLines={1}>
+                  {p.address}
+                </Text>
+              )}
+            </Pressable>
+          ))}
+        </MotiView>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  input: {
+    backgroundColor: colors.surface,
+    color: colors.text,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: 16,
+  },
+  hint: { color: colors.muted, marginTop: 6, marginLeft: 4 },
+  list: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    maxHeight: 320,
+  },
+  row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.border },
+  name: { color: colors.text, fontWeight: '600' },
+  addr: { color: colors.muted, fontSize: 12, marginTop: 2 },
+});
