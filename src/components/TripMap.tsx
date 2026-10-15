@@ -4,147 +4,216 @@ import { StyleSheet } from 'react-native';
 import {
   CANDIDATE_DOT,
   MAP_STYLES,
-  ME_DOT,
+  ME_ARROW_STYLE,
+  ME_DOT_STYLE,
   ME_HALO,
-  NAV_ROUTE_CASING,
-  NAV_ROUTE_LINE,
-  PLAN_ROUTE_CASING,
-  PLAN_ROUTE_LINE,
+  type MapStyleKey,
+  REROUTE_ARROWS,
+  REROUTE_LINE,
+  ROUTE_ACTIVE,
+  ROUTE_CASING,
+  ROUTE_UPCOMING,
   STOP_CIRCLE,
+  STOP_MOVE,
   STOP_NAME,
   STOP_NAME_HIDDEN,
   STOP_NUMBER,
-  type MapStyleKey,
 } from '../theme/mapStyles';
 import type { LngLat, RouteInfo, Stop } from '../types';
 
 export const DEFAULT_CENTER: LngLat = [81.7, 7.71]; // Batticaloa
+const NO_MOVES: Record<string, string> = {};
 
 type Props = {
-    cameraRef: RefObject<Mapbox.Camera | null>;
-    styleKey: MapStyleKey;
-    initialCenter?: LngLat;
-    stops: Stop[];
-    route: RouteInfo | null;
-    routeMode: 'plan' | 'navigate';
-    me: LngLat | null;
-    candidate: LngLat | null;
-    showNames?: boolean;
-    onPress?: (e: any) => void;
-    onStopPress?: (id: string) => void;
-    onRegionWillChange?: (e: any) => void;
+  cameraRef: RefObject<Mapbox.Camera | null>;
+  styleKey: MapStyleKey;
+  initialCenter?: LngLat;
+  stops: Stop[];
+  route: RouteInfo | null;
+  routeMode: 'plan' | 'navigate';
+  me: LngLat | null;
+  heading?: number;
+  reroutes?: LngLat[][];
+  moves?: Record<string, string>;
+  candidate: LngLat | null;
+  showNames?: boolean;
+  onPress?: (e: any) => void;
+  onStopPress?: (id: string) => void;
+  onRegionWillChange?: (e: any) => void;
 };
 
-const pointShape = (coord: LngLat) => ({
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: coord } }],
+const pointCollection = (c: LngLat) => ({
+  type: 'FeatureCollection',
+  features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } }],
 });
 
 function TripMapBase({
-    cameraRef,
-    styleKey,
-    initialCenter = DEFAULT_CENTER,
-    stops,
-    route,
-    routeMode,
-    me,
-    candidate,
-    showNames = true,
-    onPress,
-    onStopPress,
-    onRegionWillChange,
+  cameraRef,
+  styleKey,
+  initialCenter = DEFAULT_CENTER,
+  stops,
+  route,
+  routeMode,
+  me,
+  heading = -1,
+  reroutes = [],
+  moves = NO_MOVES,
+  candidate,
+  showNames = true,
+  onPress,
+  onStopPress,
+  onRegionWillChange,
 }: Props) {
-    const cameraDefaults = useMemo(
-        () => ({ centerCoordinate: initialCenter, zoomLevel: 15 }),
-        [initialCenter]
-    );
+  const navigating = routeMode === 'navigate';
+  const cameraDefaults = useMemo(() => ({ centerCoordinate: initialCenter, zoomLevel: 15 }), [initialCenter]);
 
-    const stopShape = useMemo(
-        () => ({
+  // While navigating: the first leg is active (blue) and the rest are pink.
+  // While planning: every leg is blue.
+  const routeShape = useMemo(
+    () =>
+      route
+        ? {
             type: 'FeatureCollection',
-            features: stops.map((s, i) => ({
+            features: route.legs
+              .map((leg, i) => ({
                 type: 'Feature',
-                properties: {
-                    stopId: s.id,
-                    label: String(i + 1),
-                    name: s.name,
-                    visited: s.status === 'visited' ? 1 : 0,
-                },
-                geometry: { type: 'Point', coordinates: s.coord },
-            })),
-        }),
-        [stops]
-    );
+                properties: { active: !navigating || i === 0 ? 1 : 0 },
+                geometry: { type: 'LineString', coordinates: leg },
+              }))
+              .filter((f) => f.geometry.coordinates.length > 1),
+          }
+        : null,
+    [route, navigating]
+  );
 
-    const routeShape = useMemo(
-        () =>
-            route && route.geometry.length > 1
-                ? {
-                    type: 'Feature',
-                    properties: {},
-                    geometry: { type: 'LineString', coordinates: route.geometry },
-                }
-                : null,
-        [route]
-    );
+  const rerouteShape = useMemo(
+    () =>
+      reroutes.length
+        ? {
+            type: 'FeatureCollection',
+            features: reroutes
+              .filter((l) => l.length > 1)
+              .map((l) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: l } })),
+          }
+        : null,
+    [reroutes]
+  );
 
-    const meShape = useMemo(() => (me ? pointShape(me) : null), [me]);
-    const candidateShape = useMemo(() => (candidate ? pointShape(candidate) : null), [candidate]);
+  const firstPendingId = useMemo(() => stops.find((s) => s.status === 'pending')?.id, [stops]);
 
-    const handleStopPress = useCallback(
-        (e: any) => {
-            const id = e?.features?.[0]?.properties?.stopId;
-            if (id && onStopPress) onStopPress(id);
+  const stopShape = useMemo(
+    () => ({
+      type: 'FeatureCollection',
+      features: stops.map((s, i) => ({
+        type: 'Feature',
+        properties: {
+          stopId: s.id,
+          label: String(i + 1),
+          name: s.name,
+          visited: s.status === 'visited' ? 1 : 0,
+          next: s.id === firstPendingId ? 1 : 0,
+          move: moves[s.id] ?? '',
         },
-        [onStopPress]
-    );
+        geometry: { type: 'Point', coordinates: s.coord },
+      })),
+    }),
+    [stops, firstPendingId, moves]
+  );
 
-    const navigating = routeMode === 'navigate';
+  const meShape = useMemo(
+    () =>
+      me
+        ? {
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                properties: { bearing: heading >= 0 ? heading : 0 },
+                geometry: { type: 'Point', coordinates: me },
+              },
+            ],
+          }
+        : null,
+    [me, heading]
+  );
 
-    return (
-        <Mapbox.MapView
-            style={styles.map}
-            styleURL={MAP_STYLES[styleKey].url}
-            logoEnabled={false}
-            attributionEnabled={false}
-            scaleBarEnabled={false}
-            onPress={onPress}
-            onRegionWillChange={onRegionWillChange}
-        >
-            <Mapbox.Camera ref={cameraRef} defaultSettings={cameraDefaults} />
+  // Circle while planning, triangle while navigating. Both layers exist; one is hidden.
+  const meDotStyle = useMemo(
+    () => ({ ...ME_DOT_STYLE, visibility: navigating ? 'none' : 'visible' }) as any,
+    [navigating]
+  );
+  const meHaloStyle = useMemo(
+    () => ({ ...ME_HALO, visibility: navigating ? 'none' : 'visible' }) as any,
+    [navigating]
+  );
+  const meArrowStyle = useMemo(
+    () => ({ ...ME_ARROW_STYLE, visibility: navigating ? 'visible' : 'none' }) as any,
+    [navigating]
+  );
 
-            {routeShape && (
-                <Mapbox.ShapeSource id="route" shape={routeShape as any}>
-                    <Mapbox.LineLayer id="routeCasing" style={navigating ? NAV_ROUTE_CASING : PLAN_ROUTE_CASING} />
-                    <Mapbox.LineLayer id="routeLine" style={navigating ? NAV_ROUTE_LINE : PLAN_ROUTE_LINE} />
-                </Mapbox.ShapeSource>
-            )}
+  const candidateShape = useMemo(() => (candidate ? pointCollection(candidate) : null), [candidate]);
 
-            <Mapbox.ShapeSource id="stops" shape={stopShape as any} onPress={handleStopPress}>
-                <Mapbox.CircleLayer id="stopCircles" style={STOP_CIRCLE} />
-                <Mapbox.SymbolLayer id="stopNumbers" style={STOP_NUMBER} />
-                        <Mapbox.SymbolLayer id="stopNames" style={showNames ? STOP_NAME : STOP_NAME_HIDDEN} />
-            </Mapbox.ShapeSource>
+  const handleStopPress = useCallback(
+    (e: any) => {
+      const id = e?.features?.[0]?.properties?.stopId;
+      if (id && onStopPress) onStopPress(id);
+    },
+    [onStopPress]
+  );
 
-            {candidateShape && (
-                <Mapbox.ShapeSource id="candidate" shape={candidateShape as any}>
-                    <Mapbox.CircleLayer id="candidateDot" style={CANDIDATE_DOT} />
-                </Mapbox.ShapeSource>
-            )}
+  return (
+    <Mapbox.MapView
+      style={styles.map}
+      styleURL={MAP_STYLES[styleKey].url}
+      logoEnabled={false}
+      attributionEnabled={false}
+      scaleBarEnabled={false}
+      surfaceView
+      onPress={onPress}
+      onRegionWillChange={onRegionWillChange}
+    >
+      <Mapbox.Camera ref={cameraRef} defaultSettings={cameraDefaults} />
 
-            {/* Your own position dot. Its color is set here, so it's easy to change. */}
-            {meShape && (
-                <Mapbox.ShapeSource id="me" shape={meShape as any}>
-                    <Mapbox.CircleLayer id="meHalo" style={ME_HALO} />
-                    <Mapbox.CircleLayer id="meDot" style={ME_DOT} />
-                </Mapbox.ShapeSource>
-            )}
-        </Mapbox.MapView>
-    );
+      {routeShape && (
+        <Mapbox.ShapeSource id="route" shape={routeShape as any}>
+          <Mapbox.LineLayer id="routeUpcoming" filter={['==', ['get', 'active'], 0] as any} style={ROUTE_UPCOMING} />
+          <Mapbox.LineLayer id="routeCasing" filter={['==', ['get', 'active'], 1] as any} style={ROUTE_CASING} />
+          <Mapbox.LineLayer id="routeActive" filter={['==', ['get', 'active'], 1] as any} style={ROUTE_ACTIVE} />
+        </Mapbox.ShapeSource>
+      )}
+
+      {rerouteShape && (
+        <Mapbox.ShapeSource id="reroute" shape={rerouteShape as any}>
+          <Mapbox.LineLayer id="rerouteLine" style={REROUTE_LINE} />
+          <Mapbox.SymbolLayer id="rerouteArrows" style={REROUTE_ARROWS} />
+        </Mapbox.ShapeSource>
+      )}
+
+      <Mapbox.ShapeSource id="stops" shape={stopShape as any} onPress={handleStopPress}>
+        <Mapbox.CircleLayer id="stopCircles" style={STOP_CIRCLE} />
+        <Mapbox.SymbolLayer id="stopNumbers" style={STOP_NUMBER} />
+        <Mapbox.SymbolLayer id="stopNames" style={showNames ? STOP_NAME : STOP_NAME_HIDDEN} />
+      </Mapbox.ShapeSource>
+
+      {candidateShape && (
+        <Mapbox.ShapeSource id="candidate" shape={candidateShape as any}>
+          <Mapbox.CircleLayer id="candidateDot" style={CANDIDATE_DOT} />
+        </Mapbox.ShapeSource>
+      )}
+
+      {meShape && (
+        <Mapbox.ShapeSource id="me" shape={meShape as any}>
+          <Mapbox.CircleLayer id="meHalo" style={meHaloStyle} />
+          <Mapbox.CircleLayer id="meDot" style={meDotStyle} />
+          <Mapbox.SymbolLayer id="meArrow" style={meArrowStyle} />
+        </Mapbox.ShapeSource>
+      )}
+    </Mapbox.MapView>
+  );
 }
 
 export const TripMap = memo(TripMapBase);
 
 const styles = StyleSheet.create({
-    map: { flex: 1 },
+  map: { flex: 1 },
 });

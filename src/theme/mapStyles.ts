@@ -11,40 +11,96 @@ export const MAP_STYLES = {
 export type MapStyleKey = keyof typeof MAP_STYLES;
 export const DEFAULT_STYLE: MapStyleKey = 'streets';
 
-// Layer styles are defined once, at module level. Recreating these objects on every
-// render makes Mapbox reapply them, which is one cause of the flicker.
-export const PLAN_ROUTE_CASING: any = { lineColor: colors.routeCasing, lineWidth: 8, lineCap: 'round', lineJoin: 'round' };
-export const PLAN_ROUTE_LINE: any = { lineColor: colors.route, lineWidth: 5, lineCap: 'round', lineJoin: 'round' };
-export const NAV_ROUTE_CASING: any = { lineColor: colors.navRouteCasing, lineWidth: 9, lineCap: 'round', lineJoin: 'round' };
-export const NAV_ROUTE_LINE: any = { lineColor: colors.navRoute, lineWidth: 6, lineCap: 'round', lineJoin: 'round' };
-
-export const STOP_CIRCLE: any = {
-  circleRadius: 9,
-  circleColor: ['case', ['==', ['get', 'visited'], 1], colors.stopVisited, colors.stop],
-  circleStrokeWidth: 2,
-  circleStrokeColor: colors.bg,
+// Route
+export const ROUTE_CASING: any = {
+  lineColor: colors.routeActiveCasing,
+  lineWidth: 10,
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+export const ROUTE_ACTIVE: any = {
+  lineColor: colors.routeActive,
+  lineWidth: 6,
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+export const ROUTE_UPCOMING: any = {
+  lineColor: colors.routeUpcoming,
+  lineWidth: 5,
+  lineOpacity: 0.9,
+  lineCap: 'round',
+  lineJoin: 'round',
 };
 
+// Rerouted roads
+export const REROUTE_LINE: any = {
+  lineColor: colors.routeReroute,
+  lineWidth: 7,
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+export const REROUTE_ARROWS: any = {
+  symbolPlacement: 'line',
+  symbolSpacing: 90,
+  textField: '→',
+  textSize: 16,
+  textColor: colors.routeReroute,
+  textHaloColor: colors.bg,
+  textHaloWidth: 2,
+  textKeepUpright: false,
+  textAllowOverlap: true,
+};
+
+// Stops. The next stop is larger and white with a teal ring.
+export const STOP_CIRCLE: any = {
+  circleRadius: ['case', ['==', ['get', 'next'], 1], 12, 9],
+  circleColor: [
+    'case',
+    ['==', ['get', 'visited'], 1], colors.stopVisited,
+    ['==', ['get', 'next'], 1], colors.stopNext,
+    colors.stop,
+  ],
+  circleStrokeWidth: ['case', ['==', ['get', 'next'], 1], 3, 2],
+  circleStrokeColor: ['case', ['==', ['get', 'next'], 1], colors.stopNextRing, colors.bg],
+};
+
+// Stop number, above the stop.
 export const STOP_NUMBER: any = {
   textField: ['get', 'label'],
-  textSize: 10,
-  textColor: colors.bg,
+  textSize: 12,
+  textOffset: [0, -1.3],
+  textAnchor: 'bottom',
+  textColor: colors.text,
+  textHaloColor: colors.bg,
+  textHaloWidth: 2,
   textAllowOverlap: true,
   textIgnorePlacement: true,
 };
 
-// Names sit below each stop. Mapbox hides a name when it would overlap another one.
+// Move arrow, above the number. Only shows for stops that moved during optimization.
+export const STOP_MOVE: any = {
+  textField: ['get', 'move'],
+  textSize: 18,
+  textOffset: [0, -2.7],
+  textAnchor: 'bottom',
+  textColor: ['case', ['==', ['get', 'move'], '▲'], colors.up, colors.down],
+  textHaloColor: colors.bg,
+  textHaloWidth: 2,
+  textAllowOverlap: true,
+  textIgnorePlacement: true,
+};
+
+// Stop name, below the stop.
 export const STOP_NAME: any = {
   textField: ['get', 'name'],
   textSize: 12,
-  textOffset: [0, 1.4],
+  textOffset: [0, 1.5],
   textAnchor: 'top',
   textColor: colors.text,
   textHaloColor: colors.bg,
   textHaloWidth: 1.5,
   textMaxWidth: 8,
 };
-
 export const STOP_NAME_HIDDEN: any = { ...STOP_NAME, textSize: 0 };
 
 export const CANDIDATE_DOT: any = {
@@ -54,10 +110,22 @@ export const CANDIDATE_DOT: any = {
   circleStrokeColor: colors.bg,
 };
 
-export const ME_HALO: any = { circleRadius: 18, circleColor: colors.meHalo };
-export const ME_DOT: any = {
-  circleRadius: 7,
+// Your position. The dot is shown while planning; the arrow while navigating.
+export const ME_HALO: any = { circleRadius: 16, circleColor: colors.meHalo };
+export const ME_DOT_STYLE: any = {
+  circleRadius: 8,
   circleColor: colors.me,
   circleStrokeWidth: 3,
   circleStrokeColor: '#FFFFFF',
+};
+export const ME_ARROW_STYLE: any = {
+  textField: '▲',
+  textSize: 28,
+  textColor: colors.me,
+  textHaloColor: '#FFFFFF',
+  textHaloWidth: 2,
+  textRotate: ['get', 'bearing'],
+  textRotationAlignment: 'viewport',
+  textAllowOverlap: true,
+  textIgnorePlacement: true,
 };

@@ -1,4 +1,4 @@
-export type LngLat = [number, number]; // [longitude, latitude], the Mapbox order
+export type LngLat = [number, number]; // [longitude, latitude]
 
 export type Stop = {
   id: string;
@@ -7,8 +7,20 @@ export type Stop = {
   status: 'pending' | 'visited';
 };
 
-export type RouteInfo = {
+// Raw Directions API result.
+export type RawRoute = {
   geometry: LngLat[];
+  legDistanceM: number[];
+  legDurationS: number[];
+  distanceM: number;
+  durationS: number;
+};
+
+// One polyline per stop-to-stop leg, in visiting order.
+export type RouteInfo = {
+  legs: LngLat[][];
+  legDistanceM: number[];
+  legDurationS: number[];
   distanceM: number;
   durationS: number;
 };

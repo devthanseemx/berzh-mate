@@ -45,6 +45,7 @@ export default function Plan() {
   const clear = useTripStore((s) => s.clear);
   const optimize = useTripStore((s) => s.optimize);
   const previewRoute = useTripStore((s) => s.previewRoute);
+  const moves = useTripStore((s) => s.moves);
 
   const pending = useMemo(() => stops.filter((s) => s.status === 'pending'), [stops]);
 
@@ -126,6 +127,7 @@ export default function Plan() {
         styleKey={styleKey}
         initialCenter={DEFAULT_CENTER}
         stops={stops}
+        moves={moves}
         route={route}
         routeMode="plan"
         me={me}
@@ -177,9 +179,14 @@ export default function Plan() {
             {pending.length > 0 && (
               <ScrollView style={styles.list} nestedScrollEnabled>
                 {pending.map((s, i) => (
-                  <Text key={s.id} style={styles.item} numberOfLines={1}>
-                    {i + 1}. {s.name}
-                  </Text>
+                  <View key={s.id} style={styles.listRow}>
+                    <Text style={[styles.arrow, { color: moves[s.id] === '▲' ? colors.up : colors.down }]}>
+                      {moves[s.id] ?? ''}
+                    </Text>
+                    <Text style={styles.item} numberOfLines={1}>
+                      {i + 1}. {s.name}
+                    </Text>
+                  </View>
                 ))}
               </ScrollView>
             )}
@@ -236,6 +243,8 @@ const styles = StyleSheet.create({
   hint: { color: colors.muted, marginTop: 6 },
   error: { color: colors.danger, marginTop: 6 },
   list: { maxHeight: 130, marginTop: 10 },
-  item: { color: colors.text, paddingVertical: 4 },
+  item: { color: colors.text},
   row: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  arrow: { width: 16, fontSize: 14, fontWeight: '800', textAlign: 'center' },
 });
