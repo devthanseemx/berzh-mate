@@ -52,28 +52,28 @@ export const REROUTE_ARROWS: any = {
   textAllowOverlap: true,
 };
 
-// Stops. The next stop is larger and white with a teal ring.
+// Smaller stop circles. The next stop is slightly larger.
 export const STOP_CIRCLE: any = {
-  circleRadius: ['case', ['==', ['get', 'next'], 1], 12, 9],
+  circleRadius: ['case', ['==', ['get', 'next'], 1], 7, 5],
   circleColor: [
     'case',
     ['==', ['get', 'visited'], 1], colors.stopVisited,
     ['==', ['get', 'next'], 1], colors.stopNext,
     colors.stop,
   ],
-  circleStrokeWidth: ['case', ['==', ['get', 'next'], 1], 3, 2],
-  circleStrokeColor: ['case', ['==', ['get', 'next'], 1], colors.stopNextRing, colors.bg],
+  circleStrokeWidth: 1.5,
+  circleStrokeColor: colors.bg,
 };
 
-// Stop number, above the stop.
+// Stop number sits above its circle. The thick halo keeps it readable over roads.
 export const STOP_NUMBER: any = {
   textField: ['get', 'label'],
-  textSize: 12,
-  textOffset: [0, -1.3],
+  textSize: 11,
+  textOffset: [0, -1.0],
   textAnchor: 'bottom',
   textColor: colors.text,
   textHaloColor: colors.bg,
-  textHaloWidth: 2,
+  textHaloWidth: 3,
   textAllowOverlap: true,
   textIgnorePlacement: true,
 };
@@ -129,4 +129,13 @@ export const ME_ARROW_STYLE: any = {
   textRotationAlignment: 'viewport',
   textAllowOverlap: true,
   textIgnorePlacement: true,
+};
+
+// Alternative routes: light grey, so the selected route stands out.
+export const ALT_LINE: any = {
+  lineColor: '#CBD5E1',
+  lineWidth: 5,
+  lineOpacity: 0.75,
+  lineCap: 'round',
+  lineJoin: 'round',
 };

@@ -20,4 +20,6 @@ export const NAV = {
   // Rerouted roads
   REROUTE_HIGHLIGHT_MS: 60000,  // how long the purple highlight stays
   REROUTE_DIFF_M: 25,           // a road point this far from the old route counts as changed
+
+  STEP_PASS_M: 30,              // a turn is considered passed within this distance
 };

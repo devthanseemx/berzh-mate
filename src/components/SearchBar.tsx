@@ -1,8 +1,8 @@
 import { MotiView } from 'moti';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { searchPlaces } from '../services/geoapify';
 import type { PlaceResult } from '../services/mapbox';
-import { autocomplete, newSessionToken, placeDetails } from '../services/googlePlaces';
 import { colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 
@@ -16,22 +16,28 @@ export function SearchBar({ near, onSelect }: Props) {
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const session = useRef(newSessionToken());
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
+    if (q.length === 0) {
       setResults([]);
       setStatus(null);
+      setBusy(false);
+      return;
+    }
+    if (q.length < 3) {
+      setResults([]);
+      setStatus('Type at least 3 letters.');
       setBusy(false);
       return;
     }
 
     let active = true;
     setBusy(true);
+    // Waits for a pause in typing, which keeps credit use low.
     const timer = setTimeout(async () => {
       try {
-        const found = await autocomplete(q, session.current, near);
+        const found = await searchPlaces(q, near);
         if (!active) return;
         setResults(found);
         setStatus(found.length ? null : `No places match "${q}".`);
@@ -42,7 +48,7 @@ export function SearchBar({ near, onSelect }: Props) {
       } finally {
         if (active) setBusy(false);
       }
-    }, 300);
+    }, 400);
 
     return () => {
       active = false;
@@ -50,17 +56,11 @@ export function SearchBar({ near, onSelect }: Props) {
     };
   }, [query, near]);
 
-  const choose = async (p: PlaceResult) => {
-    try {
-      const full = await placeDetails(p.placeId!, session.current);
-      session.current = newSessionToken(); // a finished selection ends the session
-      onSelect(full);
-      setQuery('');
-      setResults([]);
-      setStatus(null);
-    } catch (e: any) {
-      setStatus(`Could not open that place: ${e.message}`);
-    }
+  const choose = (p: PlaceResult) => {
+    onSelect(p);
+    setQuery('');
+    setResults([]);
+    setStatus(null);
   };
 
   return (
@@ -93,6 +93,7 @@ export function SearchBar({ near, onSelect }: Props) {
               )}
             </Pressable>
           ))}
+          <Text style={styles.credit}>Search by Geoapify · Map data © OpenStreetMap</Text>
         </MotiView>
       )}
     </View>
@@ -123,4 +124,5 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.border },
   name: { color: colors.text, fontWeight: '600' },
   addr: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  credit: { color: colors.muted, fontSize: 11, padding: 10, textAlign: 'center' },
 });

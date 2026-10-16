@@ -1,6 +1,7 @@
 import Mapbox from '@rnmapbox/maps';
 import { memo, useCallback, useMemo, type RefObject } from 'react';
 import { StyleSheet } from 'react-native';
+import type { LngLat, RouteInfo, RouteOptionItem, Stop } from '../types';
 import {
   CANDIDATE_DOT,
   MAP_STYLES,
@@ -19,7 +20,6 @@ import {
   STOP_NAME_HIDDEN,
   STOP_NUMBER,
 } from '../theme/mapStyles';
-import type { LngLat, RouteInfo, Stop } from '../types';
 
 export const DEFAULT_CENTER: LngLat = [81.7, 7.71]; // Batticaloa
 const NO_MOVES: Record<string, string> = {};
@@ -40,6 +40,9 @@ type Props = {
   onPress?: (e: any) => void;
   onStopPress?: (id: string) => void;
   onRegionWillChange?: (e: any) => void;
+    alternatives?: RouteOptionItem[];
+  selectedAltId?: string | null;
+  onAlternativePress?: (id: string) => void;
 };
 
 const pointCollection = (c: LngLat) => ({
@@ -63,6 +66,9 @@ function TripMapBase({
   onPress,
   onStopPress,
   onRegionWillChange,
+    alternatives = [],
+  selectedAltId = null,
+  onAlternativePress,
 }: Props) {
   const navigating = routeMode === 'navigate';
   const cameraDefaults = useMemo(() => ({ centerCoordinate: initialCenter, zoomLevel: 15 }), [initialCenter]);
@@ -159,6 +165,31 @@ function TripMapBase({
       if (id && onStopPress) onStopPress(id);
     },
     [onStopPress]
+  );
+
+    const altShape = useMemo(
+    () =>
+      navigating || alternatives.length === 0
+        ? null
+        : {
+            type: 'FeatureCollection',
+            features: alternatives
+              .filter((a) => a.id !== selectedAltId && a.legs.flat().length > 1)
+              .map((a) => ({
+                type: 'Feature',
+                properties: { altId: a.id },
+                geometry: { type: 'LineString', coordinates: a.legs.flat() },
+              })),
+          },
+    [alternatives, selectedAltId, navigating]
+  );
+
+  const handleAltPress = useCallback(
+    (e: any) => {
+      const id = e?.features?.[0]?.properties?.altId;
+      if (id && onAlternativePress) onAlternativePress(id);
+    },
+    [onAlternativePress]
   );
 
   return (

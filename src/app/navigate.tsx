@@ -16,6 +16,7 @@ import { useTripStore } from '../store/tripStore';
 import { colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 import { cardinal, formatClock, formatDistance, formatDuration } from '../utils/format';
+import { NextTurn } from '../components/NextTurn';
 
 export default function Navigate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -135,6 +136,7 @@ export default function Navigate() {
 
       <View style={styles.top}>
         <MapStyleSwitcher />
+        <NextTurn />
         {wrongWay && (
           <View style={styles.warn}>
             <Text style={styles.warnText}>Wrong direction. Rerouting…</Text>

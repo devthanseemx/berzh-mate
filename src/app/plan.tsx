@@ -2,13 +2,14 @@ import Mapbox from '@rnmapbox/maps';
 import { router } from 'expo-router';
 import { MotiView } from 'moti';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { LocateButton } from '../components/LocateButton';
 import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
 import { SearchBar } from '../components/SearchBar';
 import { DEFAULT_CENTER, TripMap } from '../components/TripMap';
-import { reverseGeocode, type PlaceResult } from '../services/mapbox';
+import { reverseGeocode, VEHICLES, type VehicleKey } from '../services/geoapify';
+import type { PlaceResult } from '../services/mapbox';
 import { getMyLocation } from '../services/whereAmI';
 import { useMapPrefs } from '../store/mapPrefs';
 import { useTripStore, type OptimizeResult } from '../store/tripStore';
@@ -35,21 +36,25 @@ export default function Plan() {
   const styleKey = useMapPrefs((s) => s.styleKey);
   const stops = useTripStore((s) => s.stops);
   const route = useTripStore((s) => s.route);
+  const alternatives = useTripStore((s) => s.alternatives);
+  const selectedAltId = useTripStore((s) => s.selectedAltId);
+  const vehicle = useTripStore((s) => s.vehicle);
   const loading = useTripStore((s) => s.loading);
   const optimizing = useTripStore((s) => s.optimizing);
   const optimizeResult = useTripStore((s) => s.optimizeResult);
   const error = useTripStore((s) => s.error);
+  const moves = useTripStore((s) => s.moves);
   const addStop = useTripStore((s) => s.addStop);
   const renameStop = useTripStore((s) => s.renameStop);
   const removeStop = useTripStore((s) => s.removeStop);
   const clear = useTripStore((s) => s.clear);
   const optimize = useTripStore((s) => s.optimize);
+  const setVehicle = useTripStore((s) => s.setVehicle);
+  const selectAlternative = useTripStore((s) => s.selectAlternative);
   const previewRoute = useTripStore((s) => s.previewRoute);
-  const moves = useTripStore((s) => s.moves);
 
   const pending = useMemo(() => stops.filter((s) => s.status === 'pending'), [stops]);
 
-  // Center on your location once the map is ready.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -74,7 +79,6 @@ export default function Plan() {
     focus(pos, 16);
   }, [focus]);
 
-  // Adds the pin at once, then replaces the placeholder with the place name.
   const addPinned = useCallback(
     (coord: LngLat) => {
       const id = addStop(coord, 'Locating…');
@@ -87,7 +91,7 @@ export default function Plan() {
 
   const onMapPress = useCallback(
     (e: any) => {
-      if (Date.now() - tapGuard.current < 500) return; // ignore the tap that removed a pin
+      if (Date.now() - tapGuard.current < 500) return;
       setCandidate(null);
       const coord = e.geometry.coordinates as LngLat;
       if (addTimer.current) clearTimeout(addTimer.current);
@@ -120,6 +124,8 @@ export default function Plan() {
     setCandidate(null);
   };
 
+  const vehicleNote = VEHICLES[vehicle].note;
+
   return (
     <View style={styles.root}>
       <TripMap
@@ -133,6 +139,9 @@ export default function Plan() {
         me={me}
         candidate={candidate?.coord ?? null}
         showNames
+        alternatives={alternatives}
+        selectedAltId={selectedAltId}
+        onAlternativePress={selectAlternative}
         onPress={onMapPress}
         onStopPress={onStopPress}
       />
@@ -142,6 +151,16 @@ export default function Plan() {
         <View style={{ marginTop: 8 }}>
           <MapStyleSwitcher />
         </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chipRow}>
+          {(Object.keys(VEHICLES) as VehicleKey[]).map((k) => {
+            const on = k === vehicle;
+            return (
+              <Pressable key={k} onPress={() => setVehicle(k)} style={[styles.chip, on && styles.chipOn]}>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{VEHICLES[k].label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <View style={styles.locate}>
@@ -162,22 +181,40 @@ export default function Plan() {
             <AnimatedButton label="Cancel" variant="ghost" onPress={() => setCandidate(null)} style={{ marginTop: 10 }} />
           </>
         ) : (
-          <>
+          <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>
               {pending.length} stop{pending.length === 1 ? '' : 's'} planned
             </Text>
             <Text style={styles.hint}>{me ? 'Route starts from your location' : 'Turn on location to start from you'}</Text>
+            {vehicleNote && <Text style={styles.note}>{vehicleNote}</Text>}
 
-            {route && (
-              <Text style={styles.accent}>
-                {formatDistance(route.distanceM)} · {formatDuration(route.durationS)}
-              </Text>
+            {alternatives.length > 0 && (
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardScroll} contentContainerStyle={styles.cardRow}>
+                  {alternatives.map((a, i) => {
+                    const on = a.id === selectedAltId;
+                    return (
+                      <Pressable key={a.id} onPress={() => selectAlternative(a.id)} style={[styles.card, on && styles.cardOn]}>
+                        <Text style={styles.cardTitle}>
+                          {a.label}
+                          {i === 0 ? ' · quickest' : ''}
+                        </Text>
+                        <Text style={styles.cardMeta}>
+                          {formatDistance(a.distanceM)} · {formatDuration(a.durationS)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+                <Text style={styles.hint}>Tap a light route on the map or a card to choose it.</Text>
+              </>
             )}
+
             {optimizeResult && <Text style={styles.good}>{describeOptimize(optimizeResult)}</Text>}
             {error && <Text style={styles.error}>{error}</Text>}
 
             {pending.length > 0 && (
-              <ScrollView style={styles.list} nestedScrollEnabled>
+              <View style={styles.list}>
                 {pending.map((s, i) => (
                   <View key={s.id} style={styles.listRow}>
                     <Text style={[styles.arrow, { color: moves[s.id] === '▲' ? colors.up : colors.down }]}>
@@ -188,7 +225,7 @@ export default function Plan() {
                     </Text>
                   </View>
                 ))}
-              </ScrollView>
+              </View>
             )}
 
             <Text style={styles.hint}>Search a place or tap the map. Tap a pin to remove it.</Text>
@@ -202,8 +239,8 @@ export default function Plan() {
                 style={{ flex: 1 }}
               />
               <AnimatedButton
-                label={loading ? 'Routing…' : 'Preview'}
-                onPress={previewRoute}
+                label={loading ? 'Finding routes…' : 'Show routes'}
+                onPress={() => previewRoute()}
                 disabled={!pending.length || loading}
                 style={{ flex: 1 }}
               />
@@ -215,7 +252,7 @@ export default function Plan() {
               style={{ marginTop: 10 }}
             />
             <AnimatedButton label="Clear all" variant="danger" onPress={clear} style={{ marginTop: 10 }} />
-          </>
+          </ScrollView>
         )}
       </MotiView>
     </View>
@@ -225,12 +262,26 @@ export default function Plan() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   top: { position: 'absolute', top: 12, left: 12, right: 12 },
-  locate: { position: 'absolute', top: 180, right: 16 },
+  chipScroll: { flexGrow: 0, marginTop: 8 },
+  chipRow: { gap: 8 },
+  chip: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { color: colors.text, fontWeight: '600', fontSize: 13 },
+  chipTextOn: { color: colors.bg },
+  locate: { position: 'absolute', top: 170, right: 16 },
   sheet: {
     position: 'absolute',
     left: 12,
     right: 12,
     bottom: 24,
+    maxHeight: '55%',
     padding: 20,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -238,13 +289,26 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   title: { color: colors.text, fontSize: 20, fontWeight: '800' },
-  accent: { color: colors.accent, marginTop: 6, fontWeight: '600' },
-  good: { color: colors.primary, marginTop: 6, fontWeight: '600' },
   hint: { color: colors.muted, marginTop: 6 },
+  note: { color: colors.warn, marginTop: 6, fontSize: 12 },
+  good: { color: colors.primary, marginTop: 8, fontWeight: '600' },
   error: { color: colors.danger, marginTop: 6 },
-  list: { maxHeight: 130, marginTop: 10 },
-  item: { color: colors.text},
-  row: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  cardScroll: { flexGrow: 0, marginTop: 12 },
+  cardRow: { gap: 8 },
+  card: {
+    padding: 12,
+    minWidth: 150,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  cardOn: { borderColor: colors.routeActive },
+  cardTitle: { color: colors.text, fontWeight: '700' },
+  cardMeta: { color: colors.accent, marginTop: 4, fontWeight: '600' },
+  list: { marginTop: 10 },
   listRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   arrow: { width: 16, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  item: { color: colors.text, flex: 1 },
+  row: { flexDirection: 'row', gap: 10, marginTop: 14 },
 });
