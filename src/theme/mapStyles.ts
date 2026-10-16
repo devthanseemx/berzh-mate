@@ -39,6 +39,7 @@ export const REROUTE_LINE: any = {
   lineCap: 'round',
   lineJoin: 'round',
 };
+
 export const REROUTE_ARROWS: any = {
   symbolPlacement: 'line',
   symbolSpacing: 90,
@@ -93,7 +94,7 @@ export const STOP_MOVE: any = {
 // Stop name, below the stop.
 export const STOP_NAME: any = {
   textField: ['get', 'name'],
-  textSize: 12,
+  textSize: 10,
   textOffset: [0, 1.5],
   textAnchor: 'top',
   textColor: colors.text,
@@ -104,16 +105,16 @@ export const STOP_NAME: any = {
 export const STOP_NAME_HIDDEN: any = { ...STOP_NAME, textSize: 0 };
 
 export const CANDIDATE_DOT: any = {
-  circleRadius: 9,
+  circleRadius: 5,
   circleColor: colors.candidate,
   circleStrokeWidth: 3,
   circleStrokeColor: colors.bg,
 };
 
 // Your position. The dot is shown while planning; the arrow while navigating.
-export const ME_HALO: any = { circleRadius: 16, circleColor: colors.meHalo };
+export const ME_HALO: any = { circleRadius: 12, circleColor: colors.meHalo };
 export const ME_DOT_STYLE: any = {
-  circleRadius: 8,
+  circleRadius: 5,
   circleColor: colors.me,
   circleStrokeWidth: 3,
   circleStrokeColor: '#FFFFFF',
