@@ -9,11 +9,21 @@
     "plugins": [
       "expo-router",
       "@rnmapbox/maps",
-      ["expo-location", {
-        "locationAlwaysAndWhenInUsePermission": "Berzh Mate uses your location to guide you and reroute when you go off course.",
-        "isAndroidBackgroundLocationEnabled": true,
-        "isAndroidForegroundServiceEnabled": true
-      }]
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Berzh Mate uses your location to guide you and reroute when you go off course.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Berzh Mate uses your photos so you can add a profile picture."
+        }
+      ],
+      "expo-web-browser"
     ],
     "android": {
       "package": "com.devthanseemx.berzhmate",

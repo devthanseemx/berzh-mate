@@ -17,6 +17,8 @@ import { colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 import { cardinal, formatClock, formatDistance, formatDuration } from '../utils/format';
 import { NextTurn } from '../components/NextTurn';
+import * as Location from 'expo-location';
+import { recordTrip } from '../services/history';
 
 export default function Navigate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -49,7 +51,7 @@ export default function Navigate() {
   const distanceToNext = roadToNext ?? straightToNext;
   const nextBearing = position && next ? bearing(position, next.coord) : null;
 
-  // Wait for the first GPS fix so the map never opens on the world view.
+  // Opens the map straight away, using your last known position. Live GPS takes over in the background.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -59,11 +61,16 @@ export default function Navigate() {
         router.back();
         return;
       }
-      const start = await getMyLocation();
+
+      const known = useTripStore.getState().position
+        ?? (await Location.getLastKnownPositionAsync().then((p) =>
+          p ? ([p.coords.longitude, p.coords.latitude] as LngLat) : null
+        ));
       if (cancelled) return;
-      setMyStart(start);
+
+      setMyStart(known);
       setReady(true);
-      await startTracking();
+      startTracking().catch(() => { });
       await startNavigation();
     })();
 
@@ -234,7 +241,14 @@ export default function Navigate() {
         <AnimatedButton
           label={finished ? 'Done' : 'End navigation'}
           variant={finished ? 'primary' : 'danger'}
-          onPress={() => router.back()}
+          onPress={async () => {
+            try {
+              await recordTrip(finished ? 'completed' : 'ended');
+            } catch {
+              // Saving failed. The trip stays on screen, and you can try again later.
+            }
+            router.back();
+          }}
           style={{ marginTop: 10 }}
         />
       </MotiView>

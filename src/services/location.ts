@@ -4,7 +4,6 @@ import { useTripStore } from '../store/tripStore';
 
 export const LOCATION_TASK = 'berzh-mate-location';
 
-// Runs even when the app is in the background. The store decides what to do with each fix.
 TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
   if (error) return;
   const locations = data?.locations as Location.LocationObject[] | undefined;
@@ -13,12 +12,14 @@ TaskManager.defineTask(LOCATION_TASK, async ({ data, error }: any) => {
   }
 });
 
+// Only asks for permission when it hasn't been granted yet, so starting navigation is quick.
 export async function requestNavigationPermissions(): Promise<boolean> {
-  const fg = await Location.requestForegroundPermissionsAsync();
+  let fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status !== 'granted') fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== 'granted') return false;
-  // Background access is needed for screen-off navigation. Denying it still lets
-  // the app work while it's open.
-  await Location.requestBackgroundPermissionsAsync();
+
+  const bg = await Location.getBackgroundPermissionsAsync();
+  if (bg.status !== 'granted' && bg.canAskAgain) await Location.requestBackgroundPermissionsAsync();
   return true;
 }
 
@@ -30,7 +31,6 @@ export async function startTracking() {
     distanceInterval: 5,
     pausesUpdatesAutomatically: false,
     activityType: Location.ActivityType.AutomotiveNavigation,
-    // Android needs this foreground service notification to keep tracking with the screen off.
     foregroundService: {
       notificationTitle: 'Berzh Mate is navigating',
       notificationBody: 'Tracking your route',

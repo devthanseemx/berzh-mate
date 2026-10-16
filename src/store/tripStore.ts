@@ -117,6 +117,8 @@ interface TripState {
   optimize: () => Promise<void>;
   setVehicle: (v: VehicleKey) => Promise<void>;
   selectAlternative: (id: string) => void;
+  tripStartedAt: number | null;
+  tripPlan: { distanceM: number; durationS: number } | null;
   previewRoute: (opts?: { highlight?: boolean; alternatives?: boolean }) => Promise<void>;
   startNavigation: () => Promise<void>;
   stopNavigation: () => void;
@@ -131,6 +133,8 @@ export const useTripStore = create<TripState>()(
       route: null,
       alternatives: [],
       selectedAltId: null,
+      tripStartedAt: null,
+      tripPlan: null,
       vehicle: 'car',
       stepIndex: 0,
       position: null,
@@ -331,6 +335,9 @@ export const useTripStore = create<TripState>()(
       },
 
       startNavigation: async () => {
+        const existing = get().route;
+        const hasRoute = !!existing && existing.legs.length > 0;
+
         set({
           navigating: true,
           lastRerouteAt: 0,
@@ -342,8 +349,19 @@ export const useTripStore = create<TripState>()(
           reroutedSegments: [],
           stepIndex: 0,
           alternatives: [],
+          tripStartedAt: Date.now(),
         });
+
+        // Fast path: reuse the route chosen on the planning screen, so the map opens
+        // without waiting for a network call. Rerouting still happens if you leave the road.
+        if (hasRoute && existing) {
+          set({ tripPlan: { distanceM: existing.distanceM, durationS: existing.durationS } });
+          return;
+        }
+
         await get().previewRoute({ alternatives: false });
+        const r = get().route;
+        set({ tripPlan: r ? { distanceM: r.distanceM, durationS: r.durationS } : null });
       },
 
       stopNavigation: () =>
@@ -368,12 +386,12 @@ export const useTripStore = create<TripState>()(
           route:
             st.route && st.route.legs.length > 1
               ? {
-                  ...st.route,
-                  legs: st.route.legs.slice(1),
-                  legDistanceM: st.route.legDistanceM.slice(1),
-                  legDurationS: st.route.legDurationS.slice(1),
-                  steps: [],
-                }
+                ...st.route,
+                legs: st.route.legs.slice(1),
+                legDistanceM: st.route.legDistanceM.slice(1),
+                legDurationS: st.route.legDurationS.slice(1),
+                steps: [],
+              }
               : null,
           offRouteFixes: 0,
           stepIndex: 0,
