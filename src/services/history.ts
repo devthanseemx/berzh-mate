@@ -1,5 +1,6 @@
 import { useTripStore } from '../store/tripStore';
 import { supabase } from './auth';
+import { useSettings } from '../store/settings';
 
 export type TripRow = {
   id: string;
@@ -16,6 +17,7 @@ export type TripRow = {
 
 // Saves the finished trip. Call this when the user ends or completes navigation.
 export async function recordTrip(status: 'completed' | 'ended') {
+  if (!useSettings.getState().saveHistory) return;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return;
 

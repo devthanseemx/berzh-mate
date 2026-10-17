@@ -6,7 +6,7 @@ type Props = {
   value: string;
   onChangeText: (t: string) => void;
   secure?: boolean;
-  keyboard?: 'default' | 'email-address';
+    keyboard?: 'default' | 'email-address' | 'decimal-pad';
   editable?: boolean;
   placeholder?: string;
   note?: string;

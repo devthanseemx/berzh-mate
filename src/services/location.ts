@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { useTripStore } from '../store/tripStore';
+import '../services/meterLocation';
 
 export const LOCATION_TASK = 'berzh-mate-location';
 

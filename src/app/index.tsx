@@ -78,9 +78,10 @@ export default function Home() {
         </MotiView>
 
         <View style={styles.actions}>
-          <AnimatedButton label="Plan a route" onPress={() => router.push('/plan')} style={{ flex: 1 }} />
-          <AnimatedButton label="Calculator" variant="ghost" onPress={() => router.push('/calculator')} style={{ flex: 1 }} />
+          <AnimatedButton label="Berzh Meter" onPress={() => router.push('/meter')} style={{ flex: 1 }} />
+          <AnimatedButton label="Plan a route" variant="ghost" onPress={() => router.push('/plan')} style={{ flex: 1 }} />
         </View>
+        <AnimatedButton label="Settings" variant="ghost" onPress={() => router.push('/settings')} />
 
         <Text style={styles.section}>Recent trips</Text>
 
