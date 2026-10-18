@@ -8,7 +8,15 @@ export type GroupRow = {
   created_at: string;
   finished_at: string | null;
 };
-export type MemberRow = { id: string; email: string; name: string | null; user_id: string | null; sharing: boolean };
+export type MemberRow = {
+  id: string;
+  email: string;
+  name: string | null;
+  user_id: string | null;
+  sharing: boolean;
+  advance_paid: number;
+};
+
 export type ExpenseRow = {
   id: string;
   name: string;
@@ -39,7 +47,7 @@ export async function currentUserId(): Promise<string | null> {
 }
 
 export async function claimInvites() {
-  await rpc('claim_invites', {}).catch(() => {});
+  await rpc('claim_invites', {}).catch(() => { });
 }
 
 export async function listGroups(): Promise<GroupRow[]> {
@@ -50,14 +58,25 @@ export async function listGroups(): Promise<GroupRow[]> {
 
 export const createGroup = (name: string) => rpc('create_group', { p_name: name }) as Promise<string>;
 
+export type PaymentRow = {
+  id: string;
+  from_member: string;
+  to_member: string | null;
+  amount: number;
+  note: string | null;
+  created_by: string;
+  created_at: string;
+};
+
 export async function getGroup(id: string) {
-  const [g, m, e, s] = await Promise.all([
+  const [g, m, e, s, p] = await Promise.all([
     supabase.from('groups').select('*').eq('id', id).single(),
     supabase.from('group_members').select('*').eq('group_id', id).order('created_at'),
     supabase.from('group_expenses').select('*').eq('group_id', id).order('created_at'),
     supabase.from('group_expense_shares').select('expense_id, member_id').eq('group_id', id),
+    supabase.from('group_payments').select('*').eq('group_id', id).order('created_at'),
   ]);
-  for (const r of [g, m, e, s]) if (r.error) throw clean(r.error);
+  for (const r of [g, m, e, s, p]) if (r.error) throw clean(r.error);
 
   const shareMap = new Map<string, string[]>();
   (s.data ?? []).forEach((x: any) => {
@@ -72,7 +91,10 @@ export async function getGroup(id: string) {
     shares: shareMap.get(x.id) ?? [],
   }));
 
-  return { group: g.data as GroupRow, members: (m.data ?? []) as MemberRow[], expenses };
+  const members: MemberRow[] = (m.data ?? []).map((x: any) => ({ ...x, advance_paid: Number(x.advance_paid ?? 0) }));
+  const payments: PaymentRow[] = (p.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) }));
+
+  return { group: g.data as GroupRow, members, expenses, payments };
 }
 
 export const addMember = (group: string, email: string, name: string) =>
@@ -114,3 +136,38 @@ export async function sendSummary(group: string) {
   }
   return data as { sent: number; failed: string[]; lastError?: string };
 }
+
+export const revokeInvites = (group: string) => rpc('revoke_invites', { p_group: group });
+
+export const JOIN_BASE = process.env.EXPO_PUBLIC_JOIN_BASE ?? 'https://berzhmate.vercel.app';
+
+export const createInvite = (group: string) => rpc('create_invite', { p_group: group }) as Promise<string>;
+
+export function inviteUrl(code: string): string {
+  return `${JOIN_BASE}/join/${code}`;
+}
+
+export async function getInvite(code: string) {
+  return (await rpc('get_invite', { p_token: code.trim().toUpperCase() })) as {
+    group_id: string;
+    name: string;
+    status: string;
+    members: number;
+  };
+}
+
+export const joinInvite = (code: string) =>
+  rpc('join_invite', { p_token: code.trim().toUpperCase() }) as Promise<string>;
+
+export const setAdvance = (member: string, amount: number) =>
+  rpc('set_advance', { p_member: member, p_amount: amount });
+
+export const recordPayment = (input: { group: string; member: string; amount: number; note: string }) =>
+  rpc('record_payment', {
+    p_group: input.group,
+    p_member: input.member,
+    p_amount: input.amount,
+    p_note: input.note,
+  });
+  
+export const deletePayment = (payment: string) => rpc('delete_payment', { p_payment: payment });

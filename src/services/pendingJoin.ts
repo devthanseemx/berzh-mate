@@ -1,0 +1,1 @@
+export const PENDING_JOIN_KEY = 'berzh-mate-pending-join';

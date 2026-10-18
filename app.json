@@ -6,6 +6,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "backgroundColor": "#0B1020",
     "plugins": [
       "expo-router",
       "@rnmapbox/maps",
@@ -22,11 +24,15 @@
         {
           "photosPermission": "Berzh Mate uses your photos so you can add a profile picture."
         }
-      ],
-      "expo-web-browser"
+      ]
     ],
     "android": {
       "package": "com.devthanseemx.berzhmate",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B1020"
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

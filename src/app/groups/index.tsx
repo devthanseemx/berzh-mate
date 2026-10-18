@@ -5,12 +5,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
 import { TextField } from '../../components/TextField';
-import { claimInvites, createGroup, listGroups, type GroupRow } from '../../services/groups';
+import { claimInvites, createGroup, joinInvite, listGroups, type GroupRow } from '../../services/groups';
 import { colors, radius } from '../../theme/colors';
 
 export default function Groups() {
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +30,21 @@ export default function Groups() {
       load();
     }, [load])
   );
+
+  const joinByCode = async () => {
+    if (!code.trim()) return setError('Enter the invite code.');
+    setBusy(true);
+    setError(null);
+    try {
+      const gid = await joinInvite(code);
+      setCode('');
+      router.push(`/groups/${gid}`);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const create = async () => {
     if (!name.trim()) return setError('Enter a trip name.');
@@ -50,6 +66,11 @@ export default function Groups() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Trip groups</Text>
         <Text style={styles.hint}>Split shared costs and see each other on the map during a trip.</Text>
+
+        <View style={styles.card}>
+          <TextField label="Join with a code" value={code} onChangeText={setCode} placeholder="e.g. K7QF2M9A" />
+          <AnimatedButton label="Join trip" variant="ghost" disabled={busy} onPress={joinByCode} style={{ marginTop: 14 }} />
+        </View>
 
         <View style={styles.card}>
           <TextField label="New trip" value={name} onChangeText={setName} placeholder="e.g. Ella weekend" />

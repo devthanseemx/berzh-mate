@@ -9,6 +9,9 @@ import { getProfile } from '../services/profile';
 import { colors, radius } from '../theme/colors';
 import { formatClock, formatDistance, formatDuration } from '../utils/format';
 import { CreditBar } from '../components/CreditBar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PENDING_JOIN_KEY } from '../services/pendingJoin';
+import { UpdateBanner } from '../components/UpdateBanner';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -44,6 +47,14 @@ export default function Home() {
       return () => {
         live = false;
       };
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem(PENDING_JOIN_KEY).then((token) => {
+        if (token) router.push(`/join/${token}`);
+      });
     }, [])
   );
 
@@ -118,6 +129,7 @@ export default function Home() {
           </MotiView>
         ))}
       </ScrollView>
+      <UpdateBanner />
     </SafeAreaView>
   );
 }

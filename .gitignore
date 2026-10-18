@@ -44,5 +44,4 @@ app-example
 
 .env
 .env.*
-android/local.properties
 *.keystore

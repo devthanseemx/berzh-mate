@@ -40,7 +40,12 @@ Deno.serve(async (req) => {
     sharedBy: (r.group_expense_shares ?? []).map((s: any) => s.member_id),
   }));
   const people = (members ?? []).map((m: any) => ({ id: m.id, name: m.name || m.email }));
-  const { groupTotal, balances, settlements } = computeBalances(people, expenses);
+  const { data: advRows } = await supabase.from('group_members').select('id,advance_paid').eq('group_id', group_id);
+  const { data: payRows } = await supabase.from('group_payments').select('from_member,amount').eq('group_id', group_id);
+  const advances = Object.fromEntries((advRows ?? []).map((m: any) => [m.id, Number(m.advance_paid ?? 0)]));
+  const payments = (payRows ?? []).map((p: any) => ({ from: p.from_member, amount: Number(p.amount) }));
+
+  const { groupTotal, balances, settlements } = computeBalances(people, expenses, { advances, payments });
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? '';
 
   const apiKey = Deno.env.get('MAILEROO_API_KEY');
