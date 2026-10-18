@@ -1,14 +1,16 @@
 import Mapbox from '@rnmapbox/maps';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { AnimatedButton } from '../../components/AnimatedButton';
 import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { SearchBar } from '../../components/SearchBar';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
-import { fetchRoute, routeParams } from '../../services/geoapify';
-import type { PlaceResult } from '../../services/mapbox';
+import { fetchRoute, reverseGeocode, routeParams } from '../../services/geoapify';
+import { requestNavigationPermissions } from '../../services/location';
+import { startMeterTracking } from '../../services/meterLocation';
 import { listRates, type Rate } from '../../services/rates';
-import { getMyLocation } from '../../services/whereAmI';
+import { getQuickLocation } from '../../services/whereAmI';
 import { useMapPrefs } from '../../store/mapPrefs';
 import { useMeter } from '../../store/meter';
 import { colors, radius } from '../../theme/colors';
@@ -16,7 +18,10 @@ import type { LngLat, RouteInfo, Stop } from '../../types';
 import { fareFor, money } from '../../utils/fare';
 import { formatDistance, formatDuration } from '../../utils/format';
 
-// Shows the route and fare from where you are to a chosen destination.
+type Dest = { name: string; address: string; coord: LngLat };
+
+// Estimates the fare to a destination, chosen by search or by tapping the map.
+// From here, the meter can be started directly.
 export default function Estimate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const styleKey = useMapPrefs((s) => s.styleKey);
@@ -24,7 +29,7 @@ export default function Estimate() {
 
   const [rates, setRates] = useState<Rate[]>([]);
   const [me, setMe] = useState<LngLat | null>(null);
-  const [dest, setDest] = useState<PlaceResult | null>(null);
+  const [dest, setDest] = useState<Dest | null>(null);
   const [route, setRoute] = useState<RouteInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +38,7 @@ export default function Estimate() {
 
   useEffect(() => {
     listRates().then(setRates).catch(() => {});
-    getMyLocation().then((p) => {
+    getQuickLocation().then((p) => {
       if (!p) return;
       setMe(p);
       cameraRef.current?.setCamera({ centerCoordinate: p, zoomLevel: 14, animationDuration: 600 });
@@ -41,24 +46,23 @@ export default function Estimate() {
   }, []);
 
   const stops: Stop[] = useMemo(
-    () => (dest?.coord ? [{ id: 'dest', name: dest.name, coord: dest.coord, status: 'pending' }] : []),
+    () => (dest ? [{ id: 'dest', name: dest.name, coord: dest.coord, status: 'pending' }] : []),
     [dest]
   );
 
-  const choose = async (p: PlaceResult) => {
-    if (!p.coord) return;
-    setDest(p);
-    setError(null);
+  const planTo = async (coord: LngLat, name: string, address = '') => {
+    setDest({ name, address, coord });
     setRoute(null);
+    setError(null);
     setBusy(true);
-    cameraRef.current?.setCamera({ centerCoordinate: p.coord, zoomLevel: 13, animationDuration: 600 });
+    cameraRef.current?.setCamera({ centerCoordinate: coord, zoomLevel: 13, animationDuration: 600 });
     try {
-      const start = me ?? (await getMyLocation());
+      const start = me ?? (await getQuickLocation());
       if (!start) throw new Error('Turn on location to estimate from where you are.');
       setMe(start);
 
       const { mode, extra } = routeParams('car', 'balanced');
-      const raw = await fetchRoute([start, p.coord], mode, extra);
+      const raw = await fetchRoute([start, coord], mode, extra);
       setRoute({
         legs: [raw.geometry],
         steps: [],
@@ -74,10 +78,39 @@ export default function Estimate() {
     }
   };
 
+  // Tapping the map names the point and plans the fare to it.
+  const onMapPress = async (e: any) => {
+    if (busy) return;
+    const coord = e.geometry.coordinates as LngLat;
+    setBusy(true);
+    const name = (await reverseGeocode(coord).catch(() => null)) ?? 'Pinned location';
+    setBusy(false);
+    planTo(coord, name);
+  };
+
   const clear = () => {
     setDest(null);
     setRoute(null);
     setError(null);
+  };
+
+  const startMeter = async () => {
+    if (!rate) {
+      router.push('/meter/rates');
+      return;
+    }
+    const ok = await requestNavigationPermissions();
+    if (!ok) {
+      Alert.alert('Location needed', 'Allow location to measure the trip.');
+      return;
+    }
+    useMeter.getState().startTrip({
+      name: rate.name,
+      pricePerKm: rate.price_per_km,
+      baseFare: rate.base_fare,
+    });
+    await startMeterTracking();
+    router.replace('/meter');
   };
 
   const fare = route && rate ? fareFor(route.distanceM, rate.price_per_km, rate.base_fare) : null;
@@ -94,10 +127,16 @@ export default function Estimate() {
         me={me}
         candidate={null}
         showNames
+        onPress={onMapPress}
       />
 
       <View style={styles.top}>
-        <SearchBar near={me} onSelect={choose} />
+        <SearchBar
+          near={me}
+          onSelect={(p) => {
+            if (p.coord) planTo(p.coord, p.name, p.address);
+          }}
+        />
         <View style={{ marginTop: 8 }}>
           <MapStyleSwitcher />
         </View>
@@ -106,17 +145,26 @@ export default function Estimate() {
       <View style={styles.sheet}>
         {busy && <Text style={styles.hint}>Finding the route…</Text>}
         {error && <Text style={styles.error}>{error}</Text>}
+        {!dest && !busy && <Text style={styles.hint}>Search a place, or tap anywhere on the map.</Text>}
 
-        {!dest && !busy && <Text style={styles.hint}>Search for a destination to see the distance and fare.</Text>}
-
-        {route && (
+        {dest && (
           <>
-            <Text style={styles.title} numberOfLines={1}>{dest?.name}</Text>
-            <Text style={styles.accent}>
-              {formatDistance(route.distanceM)} · {formatDuration(route.durationS)}
+            <Text style={styles.title} numberOfLines={1}>
+              {dest.name}
             </Text>
+            {!!dest.address && (
+              <Text style={styles.hint} numberOfLines={1}>
+                {dest.address}
+              </Text>
+            )}
 
-            {rate && fare !== null ? (
+            {route && (
+              <Text style={styles.accent}>
+                {formatDistance(route.distanceM)} · {formatDuration(route.durationS)}
+              </Text>
+            )}
+
+            {route && rate && fare !== null && (
               <View style={styles.fareBox}>
                 <Text style={styles.fareLabel}>ESTIMATED FARE · {rate.name.toUpperCase()}</Text>
                 <Text style={styles.fare}>{money(fare)}</Text>
@@ -125,17 +173,21 @@ export default function Estimate() {
                   {(route.distanceM / 1000).toFixed(2)} km × {money(rate.price_per_km)}
                 </Text>
               </View>
-            ) : (
-              <Text style={styles.hint}>Choose a rate on the Rates screen to see the fare.</Text>
             )}
 
+            {route && !rate && <Text style={styles.hint}>No rate selected. Choose one to see the fare.</Text>}
+
+            <AnimatedButton
+              label={rate ? `Start meter · ${rate.name}` : 'Choose a rate'}
+              onPress={startMeter}
+              style={{ marginTop: 14 }}
+            />
+            <AnimatedButton label="Clear" variant="ghost" onPress={clear} style={{ marginTop: 10 }} />
             <Text style={styles.note}>
-              This is an estimate from the planned road distance. The meter measures the distance you actually drive.
+              The estimate uses the planned road distance. The meter measures the distance you actually drive.
             </Text>
           </>
         )}
-
-        {(dest || route) && <AnimatedButton label="Clear" variant="ghost" onPress={clear} style={{ marginTop: 12 }} />}
       </View>
     </View>
   );

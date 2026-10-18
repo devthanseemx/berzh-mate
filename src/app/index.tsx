@@ -8,6 +8,7 @@ import { listTrips, type TripRow } from '../services/history';
 import { getProfile } from '../services/profile';
 import { colors, radius } from '../theme/colors';
 import { formatClock, formatDistance, formatDuration } from '../utils/format';
+import { CreditBar } from '../components/CreditBar';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -72,6 +73,7 @@ export default function Home() {
         </View>
 
         <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 400 }} style={styles.statsCard}>
+          <CreditBar onPress={() => router.push('/usage')} />
           <Stat label="Trips" value={String(trips.length)} />
           <Stat label="Planned km" value={totalKm ? formatDistance(totalKm) : '0 km'} />
           <Stat label="Stops done" value={String(totalStops)} />

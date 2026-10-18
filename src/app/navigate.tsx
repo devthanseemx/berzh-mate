@@ -1,24 +1,23 @@
 import Mapbox from '@rnmapbox/maps';
 import { router } from 'expo-router';
 import { MotiView } from 'moti';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { LocateButton } from '../components/LocateButton';
 import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
+import { NextTurn } from '../components/NextTurn';
 import { DEFAULT_CENTER, TripMap } from '../components/TripMap';
 import { haversine } from '../services/geo';
+import { recordTrip } from '../services/history';
 import { requestNavigationPermissions, startTracking, stopTracking } from '../services/location';
 import { bearing, pathLength } from '../services/routeTools';
-import { getMyLocation } from '../services/whereAmI';
+import { getQuickLocation } from '../services/whereAmI';
 import { useMapPrefs } from '../store/mapPrefs';
 import { useTripStore } from '../store/tripStore';
 import { colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 import { cardinal, formatClock, formatDistance, formatDuration } from '../utils/format';
-import { NextTurn } from '../components/NextTurn';
-import * as Location from 'expo-location';
-import { recordTrip } from '../services/history';
 
 export default function Navigate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
@@ -26,6 +25,8 @@ export default function Navigate() {
   const [myStart, setMyStart] = useState<LngLat | null>(null);
   const [follow, setFollow] = useState(true);
   const [locating, setLocating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const styleKey = useMapPrefs((s) => s.styleKey);
   const stops = useTripStore((s) => s.stops);
@@ -34,24 +35,26 @@ export default function Navigate() {
   const heading = useTripStore((s) => s.heading);
   const navigating = useTripStore((s) => s.navigating);
   const wrongWay = useTripStore((s) => s.wrongWay);
-  const reroutedSegments = useTripStore((s) => s.reroutedSegments);
+  const rerouteStamp = useTripStore((s) => s.rerouteStamp);
   const moves = useTripStore((s) => s.moves);
   const etas = useTripStore((s) => s.etas);
+  const loading = useTripStore((s) => s.loading);
+  const error = useTripStore((s) => s.error);
   const startNavigation = useTripStore((s) => s.startNavigation);
   const stopNavigation = useTripStore((s) => s.stopNavigation);
   const markArrived = useTripStore((s) => s.markArrived);
-  const error = useTripStore((s) => s.error);
 
   const pending = useMemo(() => stops.filter((s) => s.status === 'pending'), [stops]);
   const next = pending[0];
   const me = position ?? myStart;
+  const finished = !navigating && pending.length === 0;
 
   const roadToNext = route?.legs[0] && route.legs[0].length > 1 ? pathLength(route.legs[0]) : null;
   const straightToNext = position && next ? haversine(position, next.coord) : null;
   const distanceToNext = roadToNext ?? straightToNext;
   const nextBearing = position && next ? bearing(position, next.coord) : null;
 
-  // Opens the map straight away, using your last known position. Live GPS takes over in the background.
+  // Opens the map straight away and starts the route in the background.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -61,16 +64,11 @@ export default function Navigate() {
         router.back();
         return;
       }
-
-      const known = useTripStore.getState().position
-        ?? (await Location.getLastKnownPositionAsync().then((p) =>
-          p ? ([p.coords.longitude, p.coords.latitude] as LngLat) : null
-        ));
+      const start = useTripStore.getState().position ?? (await getQuickLocation());
       if (cancelled) return;
-
-      setMyStart(known);
+      setMyStart(start);
       setReady(true);
-      startTracking().catch(() => { });
+      startTracking().catch(() => {});
       await startNavigation();
     })();
 
@@ -80,6 +78,11 @@ export default function Navigate() {
       stopNavigation();
     };
   }, []);
+
+  // Stop GPS once the whole trip is complete.
+  useEffect(() => {
+    if (finished) stopTracking();
+  }, [finished]);
 
   // While following, the camera moves to each fix and turns to face your heading.
   useEffect(() => {
@@ -91,15 +94,23 @@ export default function Navigate() {
     } as any);
   }, [position, heading, follow]);
 
+  // Shows a short message when the route has been updated. No line is drawn for it.
+  useEffect(() => {
+    if (!rerouteStamp) return;
+    setToast('Route updated');
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [rerouteStamp]);
+
   // A finger drag stops following.
-  const onRegionWillChange = useCallback((e: any) => {
+  const onRegionWillChange = (e: any) => {
     if (e?.properties?.isUserInteraction) setFollow(false);
-  }, []);
+  };
 
   const recenter = async () => {
     setLocating(true);
     try {
-      const pos = position ?? (await getMyLocation());
+      const pos = position ?? (await getQuickLocation());
       if (!pos) {
         Alert.alert('Location unavailable', 'Turn on GPS and try again.');
         return;
@@ -111,8 +122,20 @@ export default function Navigate() {
     }
   };
 
-  const finished = !navigating && pending.length === 0;
-  // When the map is turned to face your heading, the triangle points straight up.
+  // Saves the trip, then clears the stops so the next plan starts fresh.
+  const finish = async () => {
+    setSaving(true);
+    try {
+      await recordTrip(finished ? 'completed' : 'ended');
+      useTripStore.getState().clear();
+      router.back();
+    } catch (e: any) {
+      Alert.alert('Trip not saved', `${e.message}\n\nThe trip stays on screen so you can try again.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const arrowHeading = follow ? 0 : heading;
   const rotation = nextBearing !== null ? (`${Math.round(nextBearing)}deg` as `${number}deg`) : '0deg';
 
@@ -128,7 +151,6 @@ export default function Navigate() {
           routeMode="navigate"
           me={me}
           heading={arrowHeading}
-          reroutes={reroutedSegments}
           moves={moves}
           candidate={null}
           showNames
@@ -149,9 +171,9 @@ export default function Navigate() {
             <Text style={styles.warnText}>Wrong direction. Rerouting…</Text>
           </View>
         )}
-        {!wrongWay && reroutedSegments.length > 0 && (
-          <View style={styles.info}>
-            <Text style={styles.infoText}>Route updated. Changed roads are purple, with arrows.</Text>
+        {toast && !wrongWay && (
+          <View style={styles.toast}>
+            <Text style={styles.toastText}>{toast}</Text>
           </View>
         )}
       </View>
@@ -169,14 +191,12 @@ export default function Navigate() {
       >
         {finished ? (
           <>
-            <Text style={styles.title}>Route complete</Text>
+            <Text style={styles.title}>Trip complete</Text>
             <Text style={styles.hint}>You visited every stop.</Text>
           </>
         ) : (
           <>
-            <Text style={styles.kicker}>
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              NEXT STOP</Text>
+            <Text style={styles.kicker}>NEXT STOP</Text>
             <Text style={styles.title} numberOfLines={2}>
               {next ? next.name : 'Locating…'}
             </Text>
@@ -190,12 +210,12 @@ export default function Navigate() {
               </View>
             )}
 
+            {loading && !route && <Text style={styles.hint}>Finding the route…</Text>}
+
             <View style={styles.statRow}>
               <View>
                 <Text style={styles.statLabel}>Distance</Text>
-                <Text style={styles.statValue}>
-                  {distanceToNext !== null ? formatDistance(distanceToNext) : '—'}
-                </Text>
+                <Text style={styles.statValue}>{distanceToNext !== null ? formatDistance(distanceToNext) : '—'}</Text>
               </View>
               <View>
                 <Text style={styles.statLabel}>Arrive</Text>
@@ -212,6 +232,7 @@ export default function Navigate() {
                 Trip total {formatDistance(route.distanceM)} · {formatDuration(route.durationS)}
               </Text>
             )}
+            {error && <Text style={styles.error}>{error}</Text>}
 
             <Text style={styles.sub}>Upcoming</Text>
             <ScrollView style={styles.list} nestedScrollEnabled>
@@ -239,16 +260,10 @@ export default function Navigate() {
         )}
 
         <AnimatedButton
-          label={finished ? 'Done' : 'End navigation'}
+          label={finished ? (saving ? 'Saving…' : 'Done') : 'End navigation'}
           variant={finished ? 'primary' : 'danger'}
-          onPress={async () => {
-            try {
-              await recordTrip(finished ? 'completed' : 'ended');
-            } catch {
-              // Saving failed. The trip stays on screen, and you can try again later.
-            }
-            router.back();
-          }}
+          disabled={saving}
+          onPress={finish}
           style={{ marginTop: 10 }}
         />
       </MotiView>
@@ -262,16 +277,16 @@ const styles = StyleSheet.create({
   top: { position: 'absolute', top: 12, left: 12, right: 12 },
   warn: { backgroundColor: colors.warn, borderRadius: radius.md, padding: 10, marginTop: 8 },
   warnText: { color: '#FFFFFF', fontWeight: '700', textAlign: 'center' },
-  info: {
+  toast: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,
     padding: 10,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: colors.routeReroute,
+    borderColor: colors.routeActive,
   },
-  infoText: { color: colors.text, textAlign: 'center' },
-  locate: { position: 'absolute', top: 150, right: 16 },
+  toastText: { color: colors.text, textAlign: 'center', fontWeight: '600' },
+  locate: { position: 'absolute', top: 170, right: 16 },
   sheet: {
     position: 'absolute',
     left: 12,
@@ -293,10 +308,10 @@ const styles = StyleSheet.create({
   statValue: { color: colors.accent, fontSize: 18, fontWeight: '700', marginTop: 2 },
   sub: { color: colors.text, fontWeight: '700', marginTop: 12 },
   list: { maxHeight: 120, marginTop: 6 },
-  listName: { color: colors.text, flex: 1, marginRight: 10 },
+  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 6 },
+  arrow: { width: 16, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  listName: { color: colors.text, flex: 1 },
   listTime: { color: colors.primary, fontWeight: '600' },
   hint: { color: colors.muted, marginTop: 4, fontSize: 12 },
-  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
-  arrow: { width: 18, fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  errorText: { color: colors.danger, marginTop: 6 },
+  error: { color: colors.danger, marginTop: 6, fontSize: 12 },
 });

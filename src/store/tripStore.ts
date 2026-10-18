@@ -6,6 +6,7 @@ import { NAV } from '../config/navigation';
 import { haversine, haversineMatrix, nearestIndex, pathCost, solveOrder } from '../services/geo';
 import {
   fetchAlternatives,
+  fetchDetourRoute,
   fetchDurations,
   fetchRoute,
   routeParams,
@@ -13,7 +14,7 @@ import {
   type VehicleKey,
 } from '../services/geoapify';
 import { angleDiff, bearing, changedRuns, pathLength, splitAtStops } from '../services/routeTools';
-import { getMyLocation } from '../services/whereAmI';
+import { getQuickLocation } from '../services/whereAmI';
 import type { LngLat, RawRoute, RouteInfo, RouteOptionItem, Stop } from '../types';
 
 const MOVE_HIGHLIGHT_MS = 60000;
@@ -28,9 +29,8 @@ const pendingOf = (stops: Stop[]) => stops.filter((s) => s.status === 'pending')
 
 async function resolveStart(navigating: boolean, position: LngLat | null): Promise<LngLat | null> {
   if (navigating && position) return position;
-  return getMyLocation();
+  return getQuickLocation();
 }
-
 function remainingOnLeg(pos: LngLat, leg: LngLat[]) {
   const { index } = nearestIndex(pos, leg);
   return { index, remainingM: pathLength(leg.slice(index)) };
@@ -306,7 +306,10 @@ export const useTripStore = create<TripState>()(
             // Navigation: fetch only the route you selected, so credits aren't spent on alternatives.
             const pref = (get().selectedAltId ?? 'balanced') as Pref;
             const { mode, extra } = routeParams(get().vehicle, pref);
-            const raw = await fetchRoute(points, mode, extra);
+            const raw =
+              pref === 'detour'
+                ? await fetchDetourRoute(points, mode)
+                : await fetchRoute(points, mode, extra);
             chosen = { ...toRouteInfo(raw, start, pending), id: pref, label: 'Route' };
           }
 

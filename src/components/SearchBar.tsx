@@ -25,9 +25,9 @@ export function SearchBar({ near, onSelect }: Props) {
       setBusy(false);
       return;
     }
-    if (q.length < 3) {
+    if (q.length < 2) {
       setResults([]);
-      setStatus('Type at least 3 letters.');
+      setStatus('Type at least 2 letters.');
       setBusy(false);
       return;
     }
