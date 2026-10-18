@@ -10,20 +10,45 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 60
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          SUPA_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPA_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          MAP_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
+          GEO_KEY: ${{ secrets.EXPO_PUBLIC_GEOAPIFY_KEY }}
+          DL_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+          KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=0
+          for v in SUPA_URL SUPA_KEY MAP_TOKEN GEO_KEY DL_TOKEN KS_B64 KS_PASS KEY_ALIAS KEY_PASS; do
+            if [ -z "${!v}" ]; then echo "Missing secret: $v"; missing=1; fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All required secrets are set."
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm install
 
       - name: Set app version from the tag
         env:
@@ -45,25 +70,46 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_GEOAPIFY_KEY: ${{ secrets.EXPO_PUBLIC_GEOAPIFY_KEY }}
+          EXPO_PUBLIC_JOIN_BASE: https://berzhmate.vercel.app
         run: npx expo prebuild --platform android --clean
 
-      - name: Gradle and signing setup
+      - name: Configure Gradle, signing, and Mapbox download token
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
         run: |
+          # Gradle 8.14.3, the version this project builds with
           sed -i 's/gradle-9\.0\.0-bin\.zip/gradle-8.14.3-bin.zip/' android/gradle/wrapper/gradle-wrapper.properties
+
+          # Release keystore
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+
+          # Signing configuration
           node scripts/patch-signing.js
+
+          # Android SDK location
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+          # Mapbox Android SDK download token, read by Gradle
+          mkdir -p ~/.gradle
+          echo "MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN" >> ~/.gradle/gradle.properties
+
           chmod +x android/gradlew
 
-      - name: Build APK
+      - name: Build release APK
         env:
-          ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+          EXPO_PUBLIC_MAPBOX_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GEOAPIFY_KEY: ${{ secrets.EXPO_PUBLIC_GEOAPIFY_KEY }}
+          EXPO_PUBLIC_JOIN_BASE: https://berzhmate.vercel.app
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: cd android && ./gradlew assembleRelease
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Confirm the APK exists
+        run: ls -lh android/app/build/outputs/apk/release/app-release.apk
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
