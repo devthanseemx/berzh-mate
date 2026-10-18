@@ -1,8 +1,11 @@
 import Mapbox from '@rnmapbox/maps';
+import * as Linking from 'expo-linking';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import '../services/location';
+import '../services/meterLocation';
+import { completeAuthFromUrl } from '../services/auth';
 import { initSession, useSession } from '../store/session';
 import { colors } from '../theme/colors';
 
@@ -32,7 +35,18 @@ export default function RootLayout() {
     initSession();
   }, []);
 
-  // Shows a blank screen while the saved session loads, so the wrong screen doesn't flash.
+  // Completes sign-in when the app is opened by a berzhmate:// link, such as a
+  // confirmation email or a Google sign-in returned by the system browser.
+  useEffect(() => {
+    const handle = (url: string | null) => {
+      if (!url) return;
+      completeAuthFromUrl(url).catch((e) => Alert.alert('Sign-in failed', e.message));
+    };
+    Linking.getInitialURL().then(handle);
+    const sub = Linking.addEventListener('url', (e) => handle(e.url));
+    return () => sub.remove();
+  }, []);
+
   if (!ready) return <View style={styles.blank} />;
 
   return (

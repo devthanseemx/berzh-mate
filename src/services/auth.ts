@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
 export const supabase = createClient(
@@ -17,31 +18,12 @@ export const supabase = createClient(
 
 const REDIRECT = 'berzhmate://auth-callback';
 
-export function signInWithEmail(email: string, password: string) {
-  return supabase.auth.signInWithPassword({ email: email.trim(), password });
-}
+// Reads a sign-in result from a returned link. Handles token links (#access_token=...)
+// and code links (?code=...). Returns true if a session was created.
+export async function completeAuthFromUrl(url: string): Promise<boolean> {
+  if (!url.startsWith(REDIRECT)) return false;
 
-export function signUpWithEmail(fullName: string, email: string, password: string) {
-  return supabase.auth.signUp({
-    email: email.trim(),
-    password,
-    options: { data: { full_name: fullName.trim() } },
-  });
-}
-
-// Opens Google sign-in in a browser window and stores the session when it returns.
-export async function signInWithGoogle() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: REDIRECT, skipBrowserRedirect: true },
-  });
-  if (error || !data.url) throw error ?? new Error('Google sign-in is not available.');
-
-  const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT);
-  if (result.type !== 'success') return; // the user closed the browser
-
-  // Split the returned link into its query part (?code=) and hash part (#access_token=).
-  const [beforeHash, hash = ''] = result.url.split('#');
+  const [beforeHash, hash = ''] = url.split('#');
   const query = new URLSearchParams(beforeHash.split('?')[1] ?? '');
   const fragment = new URLSearchParams(hash);
 
@@ -50,20 +32,58 @@ export async function signInWithGoogle() {
 
   const code = query.get('code');
   if (code) {
-    const { error: codeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (codeError) throw codeError;
-    return;
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return true;
   }
 
   const access_token = fragment.get('access_token');
   const refresh_token = fragment.get('refresh_token');
   if (access_token && refresh_token) {
-    const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-    if (sessionError) throw sessionError;
+    const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+    if (error) throw error;
+    return true;
+  }
+
+  return false;
+}
+
+export function signInWithEmail(email: string, password: string) {
+  return supabase.auth.signInWithPassword({ email: email.trim(), password });
+}
+
+export function signUpWithEmail(fullName: string, email: string, password: string) {
+  return supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      data: { full_name: fullName.trim() },
+      // Where the confirmation link returns to after it's opened.
+      emailRedirectTo: REDIRECT,
+    },
+  });
+}
+
+export async function signInWithGoogle() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: REDIRECT, skipBrowserRedirect: true },
+  });
+  if (error || !data.url) throw error ?? new Error('Google sign-in is not available.');
+
+  let result: WebBrowser.WebBrowserAuthSessionResult;
+  try {
+    result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT);
+  } catch {
+    // No in-app browser on this phone. Use the system browser instead. When Google
+    // finishes, the browser opens the app, and the link listener in the root layout
+    // completes the sign-in.
+    await Linking.openURL(data.url);
     return;
   }
 
-  throw new Error('Google sign-in did not return a session.');
+  if (result.type !== 'success') return; // the user closed the browser
+  await completeAuthFromUrl(result.url);
 }
 
 export function signOut() {
