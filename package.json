@@ -21,6 +21,7 @@
     "babel-preset-expo": "~55.0.8",
     "base64-arraybuffer": "^1.0.2",
     "expo": "~55.0.31",
+    "expo-clipboard": "~55.0.17",
     "expo-constants": "~55.0.17",
     "expo-dev-client": "~55.0.40",
     "expo-device": "~55.0.21",

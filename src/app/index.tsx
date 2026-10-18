@@ -84,6 +84,7 @@ export default function Home() {
           <AnimatedButton label="Plan a route" variant="ghost" onPress={() => router.push('/plan')} style={{ flex: 1 }} />
         </View>
         <AnimatedButton label="Settings" variant="ghost" onPress={() => router.push('/settings')} />
+        <AnimatedButton label="Trip groups" variant="ghost" onPress={() => router.push('/groups')} />
 
         <Text style={styles.section}>Recent trips</Text>
 
