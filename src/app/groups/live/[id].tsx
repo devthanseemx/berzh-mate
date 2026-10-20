@@ -4,14 +4,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useToast } from '../../../components/Toast';
 import { AnimatedButton } from '../../../components/AnimatedButton';
 import { MapStyleSwitcher } from '../../../components/MapStyleSwitcher';
 import { supabase } from '../../../services/auth';
 import { currentUserId, getGroup, sendLocation, setSharing } from '../../../services/groups';
 import { requestNavigationPermissions } from '../../../services/location';
 import { useMapPrefs } from '../../../store/mapPrefs';
-import { colors, radius } from '../../../theme/colors';
+import { colors, radius, shadow } from '../../../theme/colors';
+import { BackButton } from '../../../components/BackButton';
 import { MAP_STYLES } from '../../../theme/mapStyles';
 import type { LngLat } from '../../../types';
 
@@ -41,6 +43,8 @@ function PulseDot({ color }: { color: string }) {
 
 export default function LiveGroup() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const toast = useToast();
   const styleKey = useMapPrefs((s) => s.styleKey);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const fitted = useRef(false);
@@ -182,8 +186,9 @@ export default function LiveGroup() {
     try {
       await setSharing(id, next);
       setSharingState(next);
+      toast.success(next ? 'Sharing on' : 'Sharing off', next ? 'Your location is visible to the trip.' : 'Your location is hidden.');
     } catch (e: any) {
-      Alert.alert('Could not change sharing', e.message);
+      toast.error('Could not update', `Sharing change failed: ${e.message}`);
     }
   };
 
@@ -194,6 +199,7 @@ export default function LiveGroup() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <BackButton />
       <View style={{ flex: 1 }}>
         <Mapbox.MapView
           style={{ flex: 1 }}
@@ -214,7 +220,7 @@ export default function LiveGroup() {
           })}
         </Mapbox.MapView>
 
-        <View style={styles.top}>
+        <View style={[styles.top, { top: insets.top + 6 }]}>
           <MapStyleSwitcher />
         </View>
       </View>
@@ -254,7 +260,7 @@ export default function LiveGroup() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  top: { position: 'absolute', top: 12, left: 12, right: 12 },
+  top: { position: 'absolute', left: 12, right: 12, alignItems: 'flex-end' },
   dotWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', width: 22, height: 22, borderRadius: 11 },
   dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#FFFFFF' },
@@ -263,8 +269,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
-    borderTopWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 0,
+    ...shadow.float,
   },
   title: { color: colors.text, fontWeight: '800', fontSize: 16, marginBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },

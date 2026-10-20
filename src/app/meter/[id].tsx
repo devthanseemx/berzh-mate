@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
 import { getFareTrip, type FareTrip } from '../../services/fares';
 import { useMapPrefs } from '../../store/mapPrefs';
-import { colors, radius } from '../../theme/colors';
+import { cardStyle, colors, radius } from '../../theme/colors';
+import { BackButton } from '../../components/BackButton';
 import type { RouteInfo } from '../../types';
 import { money } from '../../utils/fare';
 import { formatDistance, formatDuration } from '../../utils/format';
@@ -32,7 +33,7 @@ export default function FareDetail() {
   if (!trip) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.primaryStrong} />
       </View>
     );
   }
@@ -52,6 +53,7 @@ export default function FareDetail() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <BackButton />
       <View style={styles.mapWrap}>
         <TripMap
           cameraRef={cameraRef}
@@ -105,9 +107,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 16,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...cardStyle,
     gap: 10,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between' },

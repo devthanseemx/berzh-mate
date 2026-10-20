@@ -46,7 +46,7 @@ export const REROUTE_ARROWS: any = {
   textField: '→',
   textSize: 16,
   textColor: colors.routeReroute,
-  textHaloColor: colors.bg,
+  textHaloColor: colors.mapHalo,
   textHaloWidth: 2,
   textKeepUpright: false,
   textAllowOverlap: true,
@@ -62,7 +62,7 @@ export const STOP_CIRCLE: any = {
     colors.stop,
   ],
   circleStrokeWidth: 1.5,
-  circleStrokeColor: colors.bg,
+  circleStrokeColor: ['case', ['==', ['get', 'next'], 1], colors.mapInk, colors.mapHalo],
 };
 
 // Stop number sits above its circle. The thick halo keeps it readable over roads.
@@ -71,8 +71,8 @@ export const STOP_NUMBER: any = {
   textSize: 11,
   textOffset: [0, -1.0],
   textAnchor: 'bottom',
-  textColor: colors.text,
-  textHaloColor: colors.bg,
+  textColor: colors.mapInk,
+  textHaloColor: colors.mapHalo,
   textHaloWidth: 3,
   textAllowOverlap: true,
   textIgnorePlacement: true,
@@ -85,7 +85,7 @@ export const STOP_MOVE: any = {
   textOffset: [0, -2.7],
   textAnchor: 'bottom',
   textColor: ['case', ['==', ['get', 'move'], '▲'], colors.up, colors.down],
-  textHaloColor: colors.bg,
+  textHaloColor: colors.mapHalo,
   textHaloWidth: 2,
   textAllowOverlap: true,
   textIgnorePlacement: true,
@@ -97,8 +97,8 @@ export const STOP_NAME: any = {
   textSize: 10,
   textOffset: [0, 1.5],
   textAnchor: 'top',
-  textColor: colors.text,
-  textHaloColor: colors.bg,
+  textColor: colors.mapInk,
+  textHaloColor: colors.mapHalo,
   textHaloWidth: 1.5,
   textMaxWidth: 8,
 };
@@ -108,7 +108,7 @@ export const CANDIDATE_DOT: any = {
   circleRadius: 5,
   circleColor: colors.candidate,
   circleStrokeWidth: 3,
-  circleStrokeColor: colors.bg,
+  circleStrokeColor: colors.mapInk,
 };
 
 // Your position. The dot is shown while planning; the arrow while navigating.
@@ -122,7 +122,7 @@ export const ME_DOT_STYLE: any = {
 export const ME_ARROW_STYLE: any = {
   textField: '▲',
   textSize: 28,
-  textColor: colors.me,
+  textColor: colors.primaryStrong,
   textHaloColor: '#FFFFFF',
   textHaloWidth: 2,
   textRotate: ['get', 'bearing'],
@@ -133,7 +133,7 @@ export const ME_ARROW_STYLE: any = {
 
 // Alternative routes: light grey, so the selected route stands out.
 export const ALT_LINE: any = {
-  lineColor: '#CBD5E1',
+  lineColor: '#94A3B8',
   lineWidth: 5,
   lineOpacity: 0.75,
   lineCap: 'round',

@@ -1,46 +1,64 @@
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { Pressable, StyleSheet } from 'react-native';
 import { useMapPrefs } from '../store/mapPrefs';
-import { colors } from '../theme/colors';
+import { colors, radius, shadow } from '../theme/colors';
 import { MAP_STYLES, type MapStyleKey } from '../theme/mapStyles';
+import { OptionSheet } from './OptionSheet';
 
+// One icon per style, so the sheet is scannable without reading every row.
+const STYLE_ICON: Record<MapStyleKey, keyof typeof Ionicons.glyphMap> = {
+  streets: 'map-outline',
+  night: 'moon-outline',
+  satellite: 'globe-outline',
+  outdoors: 'leaf-outline',
+  light: 'sunny-outline',
+};
+
+// Compact map-style control: a single floating icon button. Tapping it opens
+// a small bottom sheet with the style list — no chip row covering the map.
 export function MapStyleSwitcher() {
   const styleKey = useMapPrefs((s) => s.styleKey);
   const setStyleKey = useMapPrefs((s) => s.setStyleKey);
+  const [open, setOpen] = useState(false);
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ flexGrow: 0 }}
-      contentContainerStyle={styles.row}
-    >
-      {(Object.keys(MAP_STYLES) as MapStyleKey[]).map((key) => {
-        const active = key === styleKey;
-        return (
-          <Pressable
-            key={key}
-            onPress={() => setStyleKey(key)}
-            style={[styles.chip, active && styles.chipActive]}
-          >
-            <Text style={[styles.label, active && styles.labelActive]}>{MAP_STYLES[key].label}</Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <>
+      <Pressable
+        accessibilityLabel="Map style"
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+      >
+        <Ionicons name="layers-outline" size={20} color={colors.primaryStrong} />
+      </Pressable>
+
+      <OptionSheet
+        visible={open}
+        title="Map style"
+        value={styleKey}
+        options={(Object.keys(MAP_STYLES) as MapStyleKey[]).map((k) => ({
+          key: k,
+          label: MAP_STYLES[k].label,
+          icon: <Ionicons name={STYLE_ICON[k]} size={17} color={colors.primaryStrong} />,
+        }))}
+        onSelect={setStyleKey}
+        onClose={() => setOpen(false)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { gap: 8, paddingHorizontal: 2 },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 999,
+  button: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.float,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  label: { color: colors.text, fontWeight: '600', fontSize: 13 },
-  labelActive: { color: colors.bg },
+  buttonPressed: { backgroundColor: colors.surfaceAlt },
 });

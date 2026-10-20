@@ -2,7 +2,9 @@ import Mapbox from '@rnmapbox/maps';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
+import { BackButton } from '../../components/BackButton';
 import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { SearchBar } from '../../components/SearchBar';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
@@ -13,7 +15,7 @@ import { listRates, type Rate } from '../../services/rates';
 import { getQuickLocation } from '../../services/whereAmI';
 import { useMapPrefs } from '../../store/mapPrefs';
 import { useMeter } from '../../store/meter';
-import { colors, radius } from '../../theme/colors';
+import { colors, radius, shadow } from '../../theme/colors';
 import type { LngLat, RouteInfo, Stop } from '../../types';
 import { fareFor, money } from '../../utils/fare';
 import { formatDistance, formatDuration } from '../../utils/format';
@@ -24,6 +26,7 @@ type Dest = { name: string; address: string; coord: LngLat };
 // From here, the meter can be started directly.
 export default function Estimate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
+  const insets = useSafeAreaInsets();
   const styleKey = useMapPrefs((s) => s.styleKey);
   const activeRateId = useMeter((s) => s.activeRateId);
 
@@ -117,6 +120,7 @@ export default function Estimate() {
 
   return (
     <View style={styles.root}>
+      <BackButton />
       <TripMap
         cameraRef={cameraRef}
         styleKey={styleKey}
@@ -130,16 +134,16 @@ export default function Estimate() {
         onPress={onMapPress}
       />
 
-      <View style={styles.top}>
+      <View style={[styles.top, { top: insets.top + 6 }]}>
         <SearchBar
           near={me}
           onSelect={(p) => {
             if (p.coord) planTo(p.coord, p.name, p.address);
           }}
         />
-        <View style={{ marginTop: 8 }}>
-          <MapStyleSwitcher />
-        </View>
+      </View>
+      <View style={[styles.side, { top: insets.top + 62 }]}>
+        <MapStyleSwitcher />
       </View>
 
       <View style={styles.sheet}>
@@ -195,7 +199,8 @@ export default function Estimate() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  top: { position: 'absolute', top: 12, left: 12, right: 12 },
+  top: { position: "absolute", left: 64, right: 12 },
+  side: { position: 'absolute', right: 12, alignItems: 'flex-end' },
   sheet: {
     position: 'absolute',
     left: 12,
@@ -204,8 +209,8 @@ const styles = StyleSheet.create({
     padding: 18,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 0,
+    ...shadow.float,
   },
   title: { color: colors.text, fontSize: 18, fontWeight: '800' },
   accent: { color: colors.accent, fontWeight: '700', marginTop: 4 },
@@ -213,9 +218,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 14,
     borderRadius: radius.md,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: colors.primaryStrong,
   },
   fareLabel: { color: colors.muted, fontSize: 11, letterSpacing: 1, fontWeight: '700' },
   fare: { color: colors.accent, fontSize: 30, fontWeight: '800', marginTop: 4 },

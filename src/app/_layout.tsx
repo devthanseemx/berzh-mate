@@ -1,13 +1,19 @@
 import Mapbox from '@rnmapbox/maps';
+import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import '../services/location';
 import '../services/meterLocation';
 import { completeAuthFromUrl } from '../services/auth';
+import { ConfirmProvider } from '../components/Confirm';
+import { ToastProvider, useToast } from '../components/Toast';
 import { initSession, useSession } from '../store/session';
 import { colors } from '../theme/colors';
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from '@expo-google-fonts/inter';
+import '../theme/font';
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
@@ -28,8 +34,35 @@ function AuthGate() {
   return null;
 }
 
+// Greets the user with a toast right after they sign in (not on cold starts).
+function WelcomeToast() {
+  const toast = useToast();
+  const session = useSession((s) => s.session);
+  const ready = useSession((s) => s.ready);
+  const sawSignedOut = useRef(false);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!session) {
+      sawSignedOut.current = true;
+      return;
+    }
+    if (sawSignedOut.current) toast.success('Signed in', 'Welcome back!');
+    sawSignedOut.current = false;
+  }, [session, ready, toast]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const ready = useSession((s) => s.ready);
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+  });
 
   useEffect(() => {
     initSession();
@@ -47,21 +80,25 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  if (!ready) return <View style={styles.blank} />;
+  if (!ready || !fontsLoaded) return <View style={styles.blank} />;
 
   return (
-    <>
-      <AuthGate />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.bg },
-          headerTintColor: colors.text,
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.bg },
-          animation: 'fade_from_bottom',
-        }}
-      />
-    </>
+    <ToastProvider>
+      <ConfirmProvider>
+        <StatusBar style="dark" />
+        <AuthGate />
+        <WelcomeToast />
+        <Stack
+          screenOptions={{
+            // No header bar at all — pushed screens render the floating BackButton,
+            // so every pixel goes to content.
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.bg },
+            animation: 'fade_from_bottom',
+          }}
+        />
+      </ConfirmProvider>
+    </ToastProvider>
   );
 }
 

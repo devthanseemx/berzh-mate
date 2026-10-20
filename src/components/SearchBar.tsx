@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { searchPlaces } from '../services/geoapify';
 import type { PlaceResult } from '../services/mapbox';
-import { colors, radius } from '../theme/colors';
+import { cardStyle, colors, radius } from '../theme/colors';
 import type { LngLat } from '../types';
 
 type Props = {
@@ -61,18 +62,23 @@ export function SearchBar({ near, onSelect }: Props) {
     setQuery('');
     setResults([]);
     setStatus(null);
+    // Picking a result is done typing — hide the keyboard for the map.
+    Keyboard.dismiss();
   };
 
   return (
     <View>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search places"
-        placeholderTextColor={colors.muted}
-        returnKeyType="search"
-        style={styles.input}
-      />
+      <View style={styles.inputWrap}>
+        <Ionicons name="search" size={17} color={colors.muted} style={styles.inputIcon} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search places"
+          placeholderTextColor={colors.muted}
+          returnKeyType="search"
+          style={styles.input}
+        />
+      </View>
       {busy && <Text style={styles.hint}>Searching…</Text>}
       {!busy && status && <Text style={styles.hint}>{status}</Text>}
 
@@ -101,25 +107,30 @@ export function SearchBar({ near, onSelect }: Props) {
 }
 
 const styles = StyleSheet.create({
-  input: {
-    backgroundColor: colors.surface,
-    color: colors.text,
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.input,
     borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    fontSize: 16,
+    paddingHorizontal: 12,
+  },
+  inputIcon: { marginRight: 8 },
+  input: {
+    flex: 1,
+    color: colors.text,
+    paddingVertical: 10,
+    paddingRight: 12,
+    fontSize: 15,
   },
   hint: { color: colors.muted, marginTop: 6, marginLeft: 4 },
   list: {
-    backgroundColor: colors.surface,
     borderRadius: radius.md,
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
     maxHeight: 340,
+    ...cardStyle,
   },
   row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.border },
   name: { color: colors.text, fontWeight: '600' },

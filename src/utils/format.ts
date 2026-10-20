@@ -23,6 +23,11 @@ export function formatClock(ms?: number): string {
   return `${h}:${m} ${h24 >= 12 ? 'PM' : 'AM'}`;
 }
 
+// First letter uppercase, rest as typed — group/place names read better.
+export function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 // Compass direction for a bearing in degrees (0 = north).
 export function cardinal(deg: number): string {
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];

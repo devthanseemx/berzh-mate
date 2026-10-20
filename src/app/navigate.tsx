@@ -1,12 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import Mapbox from '@rnmapbox/maps';
 import { router } from 'expo-router';
 import { MotiView } from 'moti';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { BackButton } from '../components/BackButton';
 import { LocateButton } from '../components/LocateButton';
 import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
-import { NextTurn } from '../components/NextTurn';
 import { DEFAULT_CENTER, TripMap } from '../components/TripMap';
 import { haversine } from '../services/geo';
 import { recordTrip } from '../services/history';
@@ -15,12 +17,27 @@ import { bearing, pathLength } from '../services/routeTools';
 import { getQuickLocation } from '../services/whereAmI';
 import { useMapPrefs } from '../store/mapPrefs';
 import { useTripStore } from '../store/tripStore';
-import { colors, radius } from '../theme/colors';
+import { cardStyle, colors, radius, shadow } from '../theme/colors';
+import { fonts } from '../theme/font';
 import type { LngLat } from '../types';
 import { cardinal, formatClock, formatDistance, formatDuration } from '../utils/format';
 
+// Distances under 1 km show in meters, which is easier to read for turns.
+function shortDistance(m: number): string {
+  return m < 1000 ? `${Math.round(m)} m` : formatDistance(m);
+}
+
+// Picks a compact arrow icon for a routing instruction.
+function turnIcon(text: string): keyof typeof Ionicons.glyphMap {
+  if (/u-?turn/i.test(text)) return 'reload';
+  if (/left/i.test(text)) return 'arrow-back';
+  if (/right/i.test(text)) return 'arrow-forward';
+  return 'arrow-up';
+}
+
 export default function Navigate() {
   const cameraRef = useRef<Mapbox.Camera>(null);
+  const insets = useSafeAreaInsets();
   const [ready, setReady] = useState(false);
   const [myStart, setMyStart] = useState<LngLat | null>(null);
   const [follow, setFollow] = useState(true);
@@ -40,6 +57,7 @@ export default function Navigate() {
   const etas = useTripStore((s) => s.etas);
   const loading = useTripStore((s) => s.loading);
   const error = useTripStore((s) => s.error);
+  const stepIndex = useTripStore((s) => s.stepIndex);
   const startNavigation = useTripStore((s) => s.startNavigation);
   const stopNavigation = useTripStore((s) => s.stopNavigation);
   const markArrived = useTripStore((s) => s.markArrived);
@@ -48,6 +66,12 @@ export default function Navigate() {
   const next = pending[0];
   const me = position ?? myStart;
   const finished = !navigating && pending.length === 0;
+
+  // Current turn instruction, shown inside the bottom sheet.
+  const steps = route?.steps ?? [];
+  const step = navigating ? steps[stepIndex] : undefined;
+  const after = steps[stepIndex + 1];
+  const turnDist = step && position ? haversine(position, step.coord) : null;
 
   const roadToNext = route?.legs[0] && route.legs[0].length > 1 ? pathLength(route.legs[0]) : null;
   const straightToNext = position && next ? haversine(position, next.coord) : null;
@@ -158,14 +182,15 @@ export default function Navigate() {
         />
       ) : (
         <View style={styles.loading}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.primaryStrong} />
           <Text style={styles.hint}>Finding your location…</Text>
         </View>
       )}
 
-      <View style={styles.top}>
-        <MapStyleSwitcher />
-        <NextTurn />
+      <BackButton />
+
+      {/* Compact top strip: warnings only */}
+      <View style={[styles.top, { top: insets.top + 6 }]}>
         {wrongWay && (
           <View style={styles.warn}>
             <Text style={styles.warnText}>Wrong direction. Rerouting…</Text>
@@ -178,53 +203,74 @@ export default function Navigate() {
         )}
       </View>
 
-      <View style={styles.locate}>
+      <View style={[styles.side, { top: insets.top + 6 }]}>
+        <MapStyleSwitcher />
         <LocateButton onPress={recenter} busy={locating} />
       </View>
 
+      {/* Compact bottom sheet — everything in one small card */}
       <MotiView
         key={finished ? 'done' : next?.id ?? 'none'}
-        from={{ opacity: 0, translateY: 60 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'spring', damping: 18 }}
-        style={styles.sheet}
+        from={{ opacity: 0, translateY: 40, scale: 0.98 }}
+        animate={{ opacity: 1, translateY: 0, scale: 1 }}
+        transition={{ type: 'timing', duration: 220 }}
+        style={[styles.sheet, { bottom: insets.bottom + 12 }]}
       >
         {finished ? (
           <>
             <Text style={styles.title}>Trip complete</Text>
             <Text style={styles.hint}>You visited every stop.</Text>
+            <AnimatedButton
+              label={saving ? 'Saving…' : 'Done'}
+              variant="primary"
+              disabled={saving}
+              onPress={finish}
+              style={{ marginTop: 12 }}
+            />
           </>
         ) : (
           <>
-            <Text style={styles.kicker}>NEXT STOP</Text>
-            <Text style={styles.title} numberOfLines={2}>
-              {next ? next.name : 'Locating…'}
-            </Text>
-
-            {nextBearing !== null && straightToNext !== null && (
-              <View style={styles.dirRow}>
-                <Text style={[styles.dirArrow, { transform: [{ rotate: rotation }] }]}>▲</Text>
-                <Text style={styles.dirText}>
-                  {cardinal(nextBearing)} · {formatDistance(straightToNext)} in a straight line
-                </Text>
+            {/* Turn instruction */}
+            {step && turnDist !== null && (
+              <View style={styles.turnRow}>
+                <View style={styles.turnIcon}>
+                  <Ionicons name={turnIcon(step.text)} size={18} color={colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.turnText} numberOfLines={1}>
+                    {step.text}
+                  </Text>
+                  {after && (
+                    <Text style={styles.then} numberOfLines={1}>
+                      Then: {after.text}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.turnDist}>{shortDistance(turnDist)}</Text>
               </View>
             )}
 
+            {/* Next stop */}
+            <Text style={styles.kicker}>NEXT STOP</Text>
+            <View style={styles.stopRow}>
+              <Text style={styles.title} numberOfLines={1}>
+                {next ? next.name : 'Locating…'}
+              </Text>
+              {nextBearing !== null && (
+                <View style={styles.bearing}>
+                  <Ionicons name="navigate" size={12} color={colors.accent} style={{ transform: [{ rotate: rotation }] }} />
+                  <Text style={styles.bearingText}>{cardinal(nextBearing)}</Text>
+                </View>
+              )}
+            </View>
+
             {loading && !route && <Text style={styles.hint}>Finding the route…</Text>}
 
+            {/* Compact stats */}
             <View style={styles.statRow}>
-              <View>
-                <Text style={styles.statLabel}>Distance</Text>
-                <Text style={styles.statValue}>{distanceToNext !== null ? formatDistance(distanceToNext) : '—'}</Text>
-              </View>
-              <View>
-                <Text style={styles.statLabel}>Arrive</Text>
-                <Text style={styles.statValue}>{formatClock(next ? etas[next.id] : undefined)}</Text>
-              </View>
-              <View>
-                <Text style={styles.statLabel}>Left</Text>
-                <Text style={styles.statValue}>{pending.length}</Text>
-              </View>
+              <Stat label="Distance" value={distanceToNext !== null ? formatDistance(distanceToNext) : '—'} />
+              <Stat label="Arrive" value={formatClock(next ? etas[next.id] : undefined)} />
+              <Stat label="Left" value={String(pending.length)} />
             </View>
 
             {route && (
@@ -234,39 +280,56 @@ export default function Navigate() {
             )}
             {error && <Text style={styles.error}>{error}</Text>}
 
-            <Text style={styles.sub}>Upcoming</Text>
-            <ScrollView style={styles.list} nestedScrollEnabled>
-              {pending.map((s, i) => (
-                <View key={s.id} style={styles.listRow}>
-                  <Text style={[styles.arrow, { color: moves[s.id] === '▲' ? colors.up : colors.down }]}>
-                    {moves[s.id] ?? ''}
-                  </Text>
-                  <Text style={styles.listName} numberOfLines={1}>
-                    {i + 1}. {s.name}
-                  </Text>
-                  <Text style={styles.listTime}>{formatClock(etas[s.id])}</Text>
-                </View>
-              ))}
-            </ScrollView>
+            {/* Upcoming, capped small */}
+            {pending.length > 1 && (
+              <ScrollView style={styles.list} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                {pending.slice(1).map((s, i) => (
+                  <View key={s.id} style={styles.listRow}>
+                    <Text style={[styles.arrow, { color: moves[s.id] === '▲' ? colors.up : colors.down }]}>
+                      {moves[s.id] ?? ''}
+                    </Text>
+                    <Text style={styles.listName} numberOfLines={1}>
+                      {i + 2}. {s.name}
+                    </Text>
+                    <Text style={styles.listTime}>{formatClock(etas[s.id])}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
 
-            <AnimatedButton
-              label="Mark as visited"
-              variant="ghost"
-              onPress={markArrived}
-              disabled={!next}
-              style={{ marginTop: 12 }}
-            />
+            {/* Two compact icon buttons */}
+            <View style={styles.buttonRow}>
+              <AnimatedButton
+                label="Visited"
+                variant="ghost"
+                onPress={markArrived}
+                disabled={!next}
+                icon={<Ionicons name="checkmark" size={18} color={colors.text} />}
+                style={{ flex: 1 }}
+              />
+              <AnimatedButton
+                label={saving ? 'Saving…' : 'End'}
+                variant="danger"
+                disabled={saving}
+                onPress={finish}
+                icon={<Ionicons name="stop-circle" size={18} color="#FFFFFF" />}
+                style={{ flex: 1 }}
+              />
+            </View>
           </>
         )}
-
-        <AnimatedButton
-          label={finished ? (saving ? 'Saving…' : 'Done') : 'End navigation'}
-          variant={finished ? 'primary' : 'danger'}
-          disabled={saving}
-          onPress={finish}
-          style={{ marginTop: 10 }}
-        />
       </MotiView>
+    </View>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -274,44 +337,65 @@ export default function Navigate() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  top: { position: 'absolute', top: 12, left: 12, right: 12 },
-  warn: { backgroundColor: colors.warn, borderRadius: radius.md, padding: 10, marginTop: 8 },
-  warnText: { color: '#FFFFFF', fontWeight: '700', textAlign: 'center' },
-  toast: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.md,
-    padding: 10,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: colors.routeActive,
-  },
-  toastText: { color: colors.text, textAlign: 'center', fontWeight: '600' },
-  locate: { position: 'absolute', top: 170, right: 16 },
+  top: { position: 'absolute', left: 64, right: 68 },
+  warn: { backgroundColor: colors.danger, borderRadius: radius.md, padding: 8 },
+  warnText: { color: '#FFFFFF', fontWeight: '700', textAlign: 'center', fontSize: 12 },
+  toast: { ...cardStyle, borderRadius: radius.md, padding: 8 },
+  toastText: { color: colors.text, textAlign: 'center', fontWeight: '600', fontSize: 12 },
+  side: { position: 'absolute', right: 12, gap: 10, alignItems: 'center' },
   sheet: {
     position: 'absolute',
     left: 12,
     right: 12,
-    bottom: 24,
-    padding: 18,
+    padding: 14,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadow.float,
   },
-  kicker: { color: colors.primary, letterSpacing: 2, fontSize: 11, fontWeight: '700' },
-  title: { color: colors.text, fontSize: 22, fontWeight: '800', marginTop: 2 },
-  dirRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
-  dirArrow: { color: colors.stopNext, fontSize: 22 },
-  dirText: { color: colors.text, fontWeight: '600' },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  statLabel: { color: colors.muted, fontSize: 11 },
-  statValue: { color: colors.accent, fontSize: 18, fontWeight: '700', marginTop: 2 },
-  sub: { color: colors.text, fontWeight: '700', marginTop: 12 },
-  list: { maxHeight: 120, marginTop: 6 },
-  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 6 },
-  arrow: { width: 16, fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  listName: { color: colors.text, flex: 1 },
-  listTime: { color: colors.primary, fontWeight: '600' },
-  hint: { color: colors.muted, marginTop: 4, fontSize: 12 },
-  error: { color: colors.danger, marginTop: 6, fontSize: 12 },
+  turnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    padding: 10,
+    marginBottom: 10,
+  },
+  turnIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turnText: { color: colors.text, fontWeight: '700', fontSize: 14 },
+  then: { color: colors.muted, fontSize: 11, marginTop: 1 },
+  turnDist: { color: colors.accent, fontWeight: '800', fontSize: 14, fontFamily: fonts.bold },
+  kicker: { color: colors.accent, letterSpacing: 2, fontSize: 10, fontWeight: '700', fontFamily: fonts.semibold },
+  stopRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  title: { color: colors.text, fontSize: 17, fontWeight: '800', flex: 1, fontFamily: fonts.bold },
+  bearing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  bearingText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
+  statRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  statLabel: { color: colors.muted, fontSize: 10 },
+  statValue: { color: colors.accent, fontSize: 15, fontWeight: '800', marginTop: 1, fontFamily: fonts.bold },
+  list: { maxHeight: 64, marginTop: 8 },
+  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3, gap: 6 },
+  arrow: { width: 14, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  listName: { color: colors.text, flex: 1, fontSize: 12 },
+  listTime: { color: colors.muted, fontSize: 12, fontWeight: '600' },
+  buttonRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  hint: { color: colors.muted, marginTop: 4, fontSize: 11 },
+  error: { color: colors.danger, marginTop: 4, fontSize: 11 },
 });

@@ -1,12 +1,15 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
+import { BackButton } from '../../components/BackButton';
+import { useConfirm } from '../../components/Confirm';
 import { TextField } from '../../components/TextField';
+import { useToast } from '../../components/Toast';
 import { deleteRate, listRates, saveRate, type Rate } from '../../services/rates';
 import { useMeter } from '../../store/meter';
-import { colors, radius } from '../../theme/colors';
+import { cardStyle, colors, radius } from '../../theme/colors';
 import { money } from '../../utils/fare';
 
 type Form = { id?: string; name: string; price: string; base: string };
@@ -14,6 +17,8 @@ type Form = { id?: string; name: string; price: string; base: string };
 export default function Rates() {
   const activeRateId = useMeter((s) => s.activeRateId);
   const setActiveRateId = useMeter((s) => s.setActiveRateId);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [rates, setRates] = useState<Rate[]>([]);
   const [form, setForm] = useState<Form | null>(null);
@@ -48,34 +53,38 @@ export default function Rates() {
     try {
       await saveRate({ id: form.id, name: form.name, price_per_km: price, base_fare: base });
       setForm(null);
+      toast.success('Saved', 'Rate is ready for trips.');
       await load();
     } catch (e: any) {
       setError(e.message);
+      toast.error('Could not save', e.message);
     } finally {
       setBusy(false);
     }
   };
 
-  const remove = (r: Rate) =>
-    Alert.alert('Delete rate?', `"${r.name}" will be removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteRate(r.id);
-            if (activeRateId === r.id) setActiveRateId(null);
-            await load();
-          } catch (e: any) {
-            setError(e.message);
-          }
-        },
-      },
-    ]);
+  const remove = async (r: Rate) => {
+    const ok = await confirm({
+      title: 'Delete rate?',
+      message: `“${r.name}” will be removed.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteRate(r.id);
+      if (activeRateId === r.id) setActiveRateId(null);
+      toast.success('Deleted', 'Rate removed.');
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+      toast.error('Could not delete', e.message);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
+      <BackButton />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.hint}>Tap a rate to use it for the next trip.</Text>
 
@@ -130,29 +139,25 @@ export default function Rates() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, gap: 10 },
+  content: { padding: 20, paddingTop: 64, gap: 10 },
   hint: { color: colors.muted },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...cardStyle,
   },
   cardActive: { borderColor: colors.accent },
   name: { color: colors.text, fontWeight: '700', fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   actions: { gap: 10, marginLeft: 12 },
-  link: { color: colors.primary, fontWeight: '600' },
+  link: { color: colors.accent, fontWeight: '600' },
   form: {
     marginTop: 12,
     padding: 18,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    ...cardStyle,
   },
   formTitle: { color: colors.text, fontWeight: '800', fontSize: 18 },
   error: { color: colors.danger, marginTop: 10 },

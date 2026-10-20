@@ -46,15 +46,15 @@ export function UpdateBanner() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.primary,
     gap: 6,
   },
-  title: { color: colors.text, fontWeight: '800', fontSize: 16 },
-  sub: { color: colors.muted, fontSize: 12 },
+  title: { color: colors.accent, fontWeight: '800', fontSize: 16 },
+  sub: { color: '#92400E', fontSize: 12 },
   notes: { color: colors.text, fontSize: 12, marginTop: 4 },
   row: { flexDirection: 'row', gap: 10, marginTop: 8 },
 });

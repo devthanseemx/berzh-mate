@@ -5,9 +5,9 @@
     "scheme": "berzhmate",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
-    "backgroundColor": "#0B1020",
+    "backgroundColor": "#FFFFFF",
     "plugins": [
       "expo-router",
       "@rnmapbox/maps",
@@ -31,7 +31,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B1020"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",

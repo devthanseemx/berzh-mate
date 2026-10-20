@@ -1,3 +1,4 @@
+import { useEffect, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { colors, radius } from '../theme/colors';
@@ -10,34 +11,57 @@ type Props = {
   variant?: 'primary' | 'ghost' | 'danger';
   disabled?: boolean;
   style?: ViewStyle;
+  icon?: ReactNode;
+  // Compact size for dense toolbars (plan sheet footer, candidate actions).
+  small?: boolean;
 };
 
-export function AnimatedButton({ label, onPress, variant = 'primary', disabled, style }: Props) {
+export function AnimatedButton({ label, onPress, variant = 'primary', disabled, style, icon, small }: Props) {
   const scale = useSharedValue(1);
-  const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const pressed = useSharedValue(0);
+  const dim = useSharedValue(disabled ? 0.5 : 1);
 
-  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : 'transparent';
-  const fg = variant === 'primary' ? colors.bg : variant === 'danger' ? colors.text : colors.primary;
+  useEffect(() => {
+    dim.value = withSpring(disabled ? 0.5 : 1);
+  }, [disabled, dim]);
+
+  const animated = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: dim.value * (1 - pressed.value * 0.15),
+  }));
+
+  const bg = variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : colors.input;
+  const fg = variant === 'primary' ? colors.onPrimary : variant === 'danger' ? '#FFFFFF' : colors.text;
 
   return (
     <AnimatedPressable
-      onPressIn={() => { scale.value = withSpring(0.96); }}
-      onPressOut={() => { scale.value = withSpring(1); }}
+      onPressIn={() => {
+        scale.value = withSpring(0.96);
+        pressed.value = withSpring(1);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1);
+        pressed.value = withSpring(0);
+      }}
       onPress={onPress}
       disabled={disabled}
       style={[
         styles.base,
-        { backgroundColor: bg, borderWidth: variant === 'ghost' ? 1 : 0, borderColor: colors.primary, opacity: disabled ? 0.5 : 1 },
+        small && styles.baseSmall,
+        { backgroundColor: bg, borderWidth: variant === 'ghost' ? 1 : 0, borderColor: colors.border },
         animated,
         style,
       ]}
     >
-      <Text style={[styles.label, { color: fg }]}>{label}</Text>
+      {icon}
+      <Text style={[styles.label, small && styles.labelSmall, { color: fg }]}>{label}</Text>
     </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: radius.md, alignItems: 'center' },
+  base: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: radius.md, alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  baseSmall: { paddingVertical: 9, paddingHorizontal: 12, gap: 6 },
   label: { fontWeight: '700', fontSize: 16 },
+  labelSmall: { fontSize: 13 },
 });

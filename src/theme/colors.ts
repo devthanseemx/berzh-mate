@@ -1,35 +1,84 @@
+// Berzh Mate design tokens — clean white theme, amber brand.
 export const colors = {
-  bg: '#0B1020',
-  surface: '#151D33',
-  surfaceAlt: '#1E2844',
-  border: '#2A3658',
-  text: '#E6EDF7',
-  muted: '#8B96B0',
+  // Surfaces — white background, white cards, light-gray inner tiles.
+  bg: '#FFFFFF',
+  surface: '#FFFFFF', // cards are white
+  surfaceAlt: '#F4F6F9', // subtle gray for inner tiles/chips
+  input: '#FFFFFF', // text fields are white
+  border: '#E5E7EB', // light-gray hairline used on cards, inputs, dividers
+  text: '#0F172A', // near-black
+  muted: '#64748B',
 
-  primary: '#2DD4BF',
-  accent: '#F59E0B',
-  danger: '#F43F5E',
-  warn: '#EF4444',
-  up: '#34D399',    // ▲ moved earlier in the order
-  down: '#F43F5E',  // ▼ moved later in the order
+  // Brand — amber / orange
+  primary: '#F59E0B', // fills: buttons, chips, badges
+  primaryStrong: '#D97706', // pressed states, icons, emphasis
+  primarySoft: '#FEF3C7', // tinted backgrounds
+  onPrimary: '#1F1300', // text on amber fills
+  accent: '#B45309', // amber text on light surfaces (AA contrast)
+
+  danger: '#E11D48', // red
+  warn: '#D97706', // orange
+  success: '#059669', // green
+  up: '#059669', // moved earlier in the order
+  down: '#E11D48', // moved later in the order
 
   // Route
-  routeActive: '#0EA5E9',         // sky blue: the leg you're on
-  routeActiveCasing: '#FFFFFF',   // white edge so the active leg stands out on every map style
-  routeUpcoming: '#EC4899',       // pink: later legs (clearly different from the blue)
-  routeReroute: '#A855F7',        // violet: roads changed by a reroute
+  routeActive: '#0284C7', // sky blue: the leg you're on
+  routeActiveCasing: '#FFFFFF', // white edge so the active leg stands out on every map style
+  routeUpcoming: '#DB2777', // pink: later legs (clearly different from the blue)
+  routeReroute: '#7C3AED', // violet: roads changed by a reroute
 
   // Stops
-  stop: '#14B8A6',
+  stop: '#0D9488',
   stopNext: '#FFFFFF',
-  stopNextRing: '#14B8A6',
-  stopVisited: '#64748B',
+  stopVisited: '#94A3B8',
 
   // Your position
   me: '#F59E0B',
-  meHalo: 'rgba(245, 158, 11, 0.25)',
+  meHalo: 'rgba(245, 158, 11, 0.30)',
 
-  candidate: '#F472B6',
+  candidate: '#EC4899',
+
+  // Map labels: dark ink with a white halo reads best on light map styles.
+  mapInk: '#1E293B',
+  mapHalo: '#FFFFFF',
 };
 
-export const radius = { md: 16, lg: 24 };
+// THE single border-radius definition for the whole app (rounded-md everywhere).
+// Cards, sheets, inputs and buttons all read from here — change it once, it changes everywhere.
+// Only true pills (chips/badges) and circles use 999 / 50%.
+export const radius = { md: 16, lg: 16 };
+
+// THE card treatment: white card with a light-gray hairline border. No shadow.
+// Every card in scroll content spreads this — change it once, it changes everywhere.
+export const cardStyle = {
+  backgroundColor: colors.surface,
+  borderWidth: 1,
+  borderColor: colors.border,
+} as const;
+
+// Shadows are reserved for elements that float OVER the map (sheets, map controls),
+// where a border alone wouldn't separate them from the map imagery.
+export const shadow = {
+  card: {
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  soft: {
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  float: {
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+} as const;

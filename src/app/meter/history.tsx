@@ -4,7 +4,8 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { listFareTrips, type FareTripRow } from '../../services/fares';
-import { colors, radius } from '../../theme/colors';
+import { cardStyle, colors, radius } from '../../theme/colors';
+import { BackButton } from '../../components/BackButton';
 import { money } from '../../utils/fare';
 import { formatDistance, formatDuration } from '../../utils/format';
 
@@ -25,6 +26,8 @@ export default function History() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <BackButton />
+      <BackButton />
       <ScrollView contentContainerStyle={styles.content}>
         {error && <Text style={styles.error}>{error}</Text>}
         {!error && trips.length === 0 && (
@@ -62,15 +65,13 @@ export default function History() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, gap: 10 },
+  content: { padding: 20, paddingTop: 64, gap: 10 },
   hint: { color: colors.muted },
   error: { color: colors.danger },
   card: {
     padding: 14,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...cardStyle,
   },
   date: { color: colors.muted, fontSize: 12 },
   rate: { color: colors.text, fontWeight: '700', fontSize: 16, marginTop: 4 },

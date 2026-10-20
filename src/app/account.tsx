@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { BackButton } from '../components/BackButton';
 import { TextField } from '../components/TextField';
-import { signOut } from '../services/auth';
-import { deleteAccount, getProfile, pickAndUploadAvatar, type Profile, updateEmail, updateFullName } from '../services/profile';
+import { useToast } from '../components/Toast';
+import { getProfile, pickAndUploadAvatar, type Profile, updateEmail, updateFullName } from '../services/profile';
 import { colors } from '../theme/colors';
 
 export default function Account() {
@@ -13,8 +14,8 @@ export default function Account() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   // Google accounts get their email from Google, so it can't be changed here.
   const isGoogle = profile?.provider === 'google';
@@ -33,11 +34,11 @@ export default function Account() {
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       await fn();
     } catch (e: any) {
       setError(e.message ?? 'Something went wrong.');
+      toast.error('Update failed', e.message ?? 'Something went wrong.');
     } finally {
       setBusy(false);
     }
@@ -51,9 +52,9 @@ export default function Account() {
       if (!isGoogle && email.trim() !== profile?.email) {
         if (!email.includes('@')) throw new Error('Enter a valid email address.');
         await updateEmail(email);
-        setMessage('Check your new email to confirm the change.');
+        toast.success('Check your email', 'Confirm the new address to finish.');
       } else {
-        setMessage('Saved.');
+        toast.success('Saved', 'Your profile is up to date.');
       }
       setProfile((p) => (p ? { ...p, fullName: name.trim() } : p));
     });
@@ -61,27 +62,17 @@ export default function Account() {
   const changePhoto = () =>
     run(async () => {
       const url = await pickAndUploadAvatar();
-      if (url) setProfile((p) => (p ? { ...p, avatarUrl: url } : p));
+      if (url) {
+        setProfile((p) => (p ? { ...p, avatarUrl: url } : p));
+        toast.success('Saved', 'Photo updated.');
+      }
     });
-
-  const confirmDelete = () =>
-    Alert.alert(
-      'Delete account?',
-      'This permanently deletes your account, profile, and trip history. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => run(() => deleteAccount()),
-        },
-      ]
-    );
 
   const initial = (profile?.fullName || profile?.email || '?').charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.safe}>
+      <BackButton />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.avatarRow}>
           {profile?.avatarUrl ? (
@@ -104,13 +95,10 @@ export default function Account() {
           note={isGoogle ? 'Signed in with Google. Change your email in your Google account.' : 'Changing your email sends a confirmation link.'}
         />
 
-        {message && <Text style={styles.good}>{message}</Text>}
         {error && <Text style={styles.error}>{error}</Text>}
 
         <AnimatedButton label={busy ? 'Saving…' : 'Save changes'} disabled={busy} onPress={save} style={{ marginTop: 20 }} />
-        <AnimatedButton label="Sign out" variant="ghost" onPress={() => signOut()} style={{ marginTop: 10 }} />
-        <AnimatedButton label="Delete account" variant="danger" disabled={busy} onPress={confirmDelete} style={{ marginTop: 28 }} />
-        <AnimatedButton label="Back" variant="ghost" onPress={() => router.back()} style={{ marginTop: 10 }} />
+        <AnimatedButton label="Back" variant="ghost" onPress={() => router.back()} style={{ marginTop: 14 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,11 +106,11 @@ export default function Account() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, gap: 4 },
+  content: { padding: 20, paddingTop: 64, gap: 4 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10 },
   avatar: { width: 72, height: 72, borderRadius: 36 },
-  avatarFallback: { backgroundColor: colors.surfaceAlt, borderWidth: 2, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: colors.primary, fontSize: 28, fontWeight: '800' },
-  good: { color: colors.primary, marginTop: 14 },
+  avatarFallback: { backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: colors.accent, fontSize: 28, fontWeight: '800' },
+  good: { color: colors.accent, marginTop: 14 },
   error: { color: colors.danger, marginTop: 14 },
 });

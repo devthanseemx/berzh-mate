@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
+import { BackButton } from '../components/BackButton';
 import { CreditBar } from '../components/CreditBar';
+import { useConfirm } from '../components/Confirm';
 import { TextField } from '../components/TextField';
+import { useToast } from '../components/Toast';
 import { DAILY_LIMIT, useUsage } from '../store/usage';
-import { colors, radius } from '../theme/colors';
+import { cardStyle, colors, radius } from '../theme/colors';
 import { formatClock } from '../utils/format';
 
 export default function Usage() {
@@ -14,6 +17,8 @@ export default function Usage() {
   const clearLog = useUsage((s) => s.clearLog);
   const [calib, setCalib] = useState('');
   const [note, setNote] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const apply = () => {
     const n = Number(calib);
@@ -23,11 +28,25 @@ export default function Usage() {
     }
     setUsed(n);
     setCalib('');
-    setNote('Updated to match the dashboard.');
+    setNote(null);
+    toast.success('Updated', 'Count matches the dashboard.');
+  };
+
+  const confirmClear = async () => {
+    const ok = await confirm({
+      title: 'Clear the service log?',
+      message: 'Recorded search and route issues will be removed from this list.',
+      confirmLabel: 'Clear',
+      danger: true,
+    });
+    if (!ok) return;
+    clearLog();
+    toast.info('Cleared', 'Service log is empty.');
   };
 
   return (
     <SafeAreaView style={styles.safe}>
+      <BackButton />
       <ScrollView contentContainerStyle={styles.content}>
         <CreditBar />
 
@@ -52,7 +71,7 @@ export default function Usage() {
           <View style={styles.logHead}>
             <Text style={styles.section}>Service log</Text>
             {events.length > 0 && (
-              <Text style={styles.clear} onPress={clearLog}>
+              <Text style={styles.clear} onPress={confirmClear}>
                 Clear
               </Text>
             )}
@@ -74,19 +93,17 @@ export default function Usage() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 20, gap: 14 },
+  content: { padding: 20, paddingTop: 64, gap: 14 },
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...cardStyle,
   },
   section: { color: colors.text, fontWeight: '700', fontSize: 15 },
   hint: { color: colors.muted, marginTop: 6, fontSize: 12, lineHeight: 17 },
-  note: { color: colors.primary, marginTop: 10, fontSize: 12 },
+  note: { color: colors.accent, marginTop: 10, fontSize: 12 },
   logHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  clear: { color: colors.primary, fontWeight: '600' },
+  clear: { color: colors.accent, fontWeight: '600' },
   logRow: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: colors.border },
   logTime: { color: colors.muted, fontSize: 11 },
   logText: { color: colors.text, marginTop: 2, fontSize: 13 },
