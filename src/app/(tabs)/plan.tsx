@@ -80,6 +80,7 @@ export default function Plan() {
   const [vehOpen, setVehOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [topPanelHeight, setTopPanelHeight] = useState(0);
   const handledMapsUrl = useRef<string | null>(null);
 
   const styleKey = useMapPrefs((s) => s.styleKey);
@@ -633,6 +634,7 @@ export default function Plan() {
       <TripMap
         cameraRef={cameraRef}
         styleKey={styleKey}
+        surfaceView={false}
         initialCenter={DEFAULT_CENTER}
         stops={planningMode === 'multi' ? stops : distanceStops}
         moves={moves}
@@ -648,7 +650,13 @@ export default function Plan() {
         onStopPress={planningMode === 'multi' ? onStopPress : undefined}
       />
 
-      <View style={[styles.top, { top: insets.top + 6 }]}>
+      <View
+        style={[styles.top, { top: insets.top + 6 }]}
+        onLayout={(event) => {
+          const height = Math.ceil(event.nativeEvent.layout.height);
+          setTopPanelHeight((previous) => (previous === height ? previous : height));
+        }}
+      >
         <View style={styles.modeSwitch}>
           <Pressable
             onPress={() => setMode('distance')}
@@ -747,8 +755,8 @@ export default function Plan() {
         )}
       </View>
 
-      {!searchOpen && (
-        <MapControlGroup style={{ top: insets.top + (planningMode === 'distance' ? 214 : 188) }}>
+      {!searchOpen && topPanelHeight > 0 && (
+        <MapControlGroup style={{ top: insets.top + 6 + topPanelHeight + 6 }}>
           <MapStyleSwitcher />
           <Pressable
             accessibilityLabel="Saved places"

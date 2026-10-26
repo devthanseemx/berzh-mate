@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet } from 'react-native';
+import { Keyboard, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 
@@ -11,7 +11,10 @@ export function BackButton() {
   return (
     <Pressable
       accessibilityLabel="Go back"
-      onPress={() => router.back()}
+      onPress={() => {
+        Keyboard.dismiss();
+        router.back();
+      }}
       hitSlop={14}
       style={({ pressed }) => [styles.button, { top: insets.top + 4 }, pressed && styles.pressed]}
     >

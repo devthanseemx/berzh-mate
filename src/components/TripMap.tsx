@@ -40,7 +40,8 @@ type Props = {
   onPress?: (e: any) => void;
   onStopPress?: (id: string) => void;
   onRegionWillChange?: (e: any) => void;
-    alternatives?: RouteOptionItem[];
+  surfaceView?: boolean;
+  alternatives?: RouteOptionItem[];
   selectedAltId?: string | null;
   onAlternativePress?: (id: string) => void;
 };
@@ -66,7 +67,8 @@ function TripMapBase({
   onPress,
   onStopPress,
   onRegionWillChange,
-    alternatives = [],
+  surfaceView = true,
+  alternatives = [],
   selectedAltId = null,
   onAlternativePress,
 }: Props) {
@@ -199,7 +201,7 @@ function TripMapBase({
       logoEnabled={false}
       attributionEnabled={false}
       scaleBarEnabled={false}
-      surfaceView
+      surfaceView={surfaceView}
       onPress={onPress}
       onRegionWillChange={onRegionWillChange}
     >

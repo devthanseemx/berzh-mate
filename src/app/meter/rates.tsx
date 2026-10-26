@@ -109,11 +109,21 @@ export default function Rates() {
           const active = r.id === activeRateId;
           return (
             <View key={r.id} style={[styles.card, active && styles.cardActive]}>
-              <Pressable onPress={() => setActiveRateId(r.id)} style={{ flex: 1 }}>
-                <Text style={styles.name}>
-                  {active ? '✓ ' : ''}
-                  {r.name}
-                </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => setActiveRateId(r.id)}
+                style={{ flex: 1 }}
+              >
+                <View style={styles.rateTitleRow}>
+                  <Text style={styles.name}>{r.name}</Text>
+                  {active && (
+                    <View style={styles.activeBadge}>
+                      <Ionicons name="checkmark-circle" size={15} color={colors.primaryStrong} />
+                      <Text style={styles.activeText}>SELECTED</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.meta}>
                   {money(r.price_per_km)} per km
                   {r.base_fare > 0 ? ` · base ${money(r.base_fare)}` : ''}
@@ -174,7 +184,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     ...cardStyle,
   },
-  cardActive: { borderColor: colors.accent },
+  cardActive: { borderColor: colors.primaryStrong, backgroundColor: colors.primarySoft },
+  rateTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  activeText: { color: colors.primaryStrong, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   name: { color: colors.text, fontWeight: '700', fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4 },
   actions: { gap: 10, marginLeft: 12 },

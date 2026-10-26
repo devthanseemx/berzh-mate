@@ -321,12 +321,23 @@ export async function fetchDetourRoute(points: LngLat[], mode: string): Promise<
 }
 
 // Routes for the chosen vehicle, one per preference, duplicates removed, fastest first.
-export async function fetchAlternatives(points: LngLat[], vehicle: VehicleKey) {
+export async function fetchAlternatives(
+  points: LngLat[],
+  vehicle: VehicleKey,
+  onFirstRoute?: (route: { id: Pref; label: string; raw: RawRoute }) => void
+) {
   const prefs = VEHICLES[vehicle].prefs;
+  let reportedFirstRoute = false;
   const settled = await Promise.allSettled(
     prefs.map((p) => {
       const { mode, extra } = routeParams(vehicle, p);
-      return fetchRoute(points, mode, extra);
+      return fetchRoute(points, mode, extra).then((raw) => {
+        if (!reportedFirstRoute && raw.geometry.length > 1 && raw.durationS > 0) {
+          reportedFirstRoute = true;
+          onFirstRoute?.({ id: p, label: PREF_LABEL[p], raw });
+        }
+        return raw;
+      });
     })
   );
 

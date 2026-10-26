@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
 import { useEffect, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { searchPlaces } from '../services/geoapify';
 import type { PlaceResult } from '../services/mapbox';
 import { cardStyle, colors, radius } from '../theme/colors';
@@ -90,17 +90,24 @@ export function SearchBar({ near, onSelect, placeholder = 'Search places' }: Pro
           transition={{ type: 'timing', duration: 220 }}
           style={styles.list}
         >
-          {results.map((p) => (
-            <Pressable key={p.id} onPress={() => choose(p)} style={styles.row}>
-              <Text style={styles.name}>{p.name}</Text>
-              {!!p.address && (
-                <Text style={styles.addr} numberOfLines={1}>
-                  {p.address}
-                </Text>
-              )}
-            </Pressable>
-          ))}
-          <Text style={styles.credit}>Search by Geoapify · Map data © OpenStreetMap</Text>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            style={styles.results}
+          >
+            {results.map((p) => (
+              <Pressable key={p.id} onPress={() => choose(p)} style={styles.row}>
+                <Text style={styles.name}>{p.name}</Text>
+                {!!p.address && (
+                  <Text style={styles.addr} numberOfLines={1}>
+                    {p.address}
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+            <Text style={styles.credit}>Search by Geoapify · Map data © OpenStreetMap</Text>
+          </ScrollView>
         </MotiView>
       )}
     </View>
@@ -133,6 +140,7 @@ const styles = StyleSheet.create({
     maxHeight: 340,
     ...cardStyle,
   },
+  results: { maxHeight: 340 },
   row: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.border },
   name: { color: colors.text, fontWeight: '600' },
   addr: { color: colors.muted, fontSize: 12, marginTop: 2 },

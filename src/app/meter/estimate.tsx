@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import Mapbox from '@rnmapbox/maps';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
 import { LocateButton } from '../../components/LocateButton';
@@ -91,11 +91,22 @@ export default function Estimate() {
   const [meterBusy, setMeterBusy] = useState(false);
   const [meterError, setMeterError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [topPanelHeight, setTopPanelHeight] = useState(0);
+  const [sheetExpanded, setSheetExpanded] = useState(true);
 
   const rate = rates.find((r) => r.id === activeRateId) ?? null;
   const start = startPlace?.coord ?? me;
   const elapsedS = run.startedAt ? Math.max(0, ((run.status === 'done' ? run.endedAt ?? now : now) - run.startedAt) / 1000) : 0;
   const runningFare = run.rate ? fareFor(run.distanceM, run.rate.pricePerKm, run.rate.baseFare) : 0;
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        Keyboard.dismiss();
+      },
+      []
+    )
+  );
 
   useEffect(() => {
     listRates().then(setRates).catch((e: unknown) => {
@@ -135,19 +146,26 @@ export default function Estimate() {
     setSelectedRouteId(null);
     setError(null);
     setBusy(true);
-    fetchAlternatives([start, dest.coord], vehicle)
+    const asOption = ({ id: optionId, label, raw }: Awaited<ReturnType<typeof fetchAlternatives>>[number]): RouteOptionItem => ({
+      legs: raw.legs ?? [raw.geometry],
+      steps: raw.steps ?? [],
+      legDistanceM: raw.legDistanceM,
+      legDurationS: raw.legDurationS,
+      distanceM: raw.distanceM,
+      durationS: raw.durationS,
+      id: optionId,
+      label,
+    });
+    fetchAlternatives([start, dest.coord], vehicle, (first) => {
+      if (requestId.current !== id) return;
+      const option = asOption(first);
+      setRouteOptions([option]);
+      setRoute(option);
+      setSelectedRouteId(option.id);
+    })
       .then((found) => {
         if (requestId.current !== id) return;
-        const options: RouteOptionItem[] = found.map(({ id: optionId, label, raw }) => ({
-          legs: raw.legs ?? [raw.geometry],
-          steps: raw.steps ?? [],
-          legDistanceM: raw.legDistanceM,
-          legDurationS: raw.legDurationS,
-          distanceM: raw.distanceM,
-          durationS: raw.durationS,
-          id: optionId,
-          label,
-        }));
+        const options: RouteOptionItem[] = found.map(asOption);
         setRouteOptions(options);
         setRoute(options[0] ?? null);
         setSelectedRouteId(options[0]?.id ?? null);
@@ -222,17 +240,33 @@ export default function Estimate() {
   }, [focusCoordinate, toast]);
 
   const chooseMapPoint = useCallback(
-    async (coord: LngLat) => {
-      const placeName = (await reverseGeocode(coord).catch(() => null)) ?? 'Pinned location';
-      if (endpoint === 'start') {
-        setStartPlace({ name: placeName, address: '', coord });
-      } else {
-        setDest({ name: placeName, address: '', coord });
+    (coord: LngLat) => {
+      const pinned = { name: 'Pinned location', address: '', coord };
+      if (endpoint === 'start') setStartPlace(pinned);
+      else {
+        setDest(pinned);
+        setSheetExpanded(true);
       }
       setSearchOpen(false);
       focusCoordinate(coord);
+      void reverseGeocode(coord)
+        .then((placeName) => {
+          if (!placeName) return;
+          const updateName = (place: Place | null) =>
+            place && place.coord[0] === coord[0] && place.coord[1] === coord[1]
+              ? { ...place, name: placeName }
+              : place;
+          setStartPlace((place) => updateName(place));
+          setDest((place) => updateName(place));
+        })
+        .catch((error: unknown) => {
+          toast.error(
+            'Could not identify this place',
+            error instanceof Error ? error.message : 'The selected map pin will still be used.'
+          );
+        });
     },
-    [endpoint, focusCoordinate]
+    [endpoint, focusCoordinate, toast]
   );
 
   const onMapPress = useCallback(
@@ -248,7 +282,10 @@ export default function Estimate() {
       if (!place.coord) return;
       const selected = { name: place.name, address: place.address, coord: place.coord };
       if (endpoint === 'start') setStartPlace(selected);
-      else setDest(selected);
+      else {
+        setDest(selected);
+        setSheetExpanded(true);
+      }
       setSearchOpen(false);
       focusCoordinate(place.coord);
     },
@@ -263,6 +300,7 @@ export default function Estimate() {
     setSelectedRouteId(null);
     setError(null);
     setBusy(false);
+    setSheetExpanded(true);
   };
 
   const startMeter = async () => {
@@ -339,6 +377,7 @@ export default function Estimate() {
         <TripMap
           cameraRef={cameraRef}
           styleKey={styleKey}
+          surfaceView={false}
           initialCenter={run.last ?? me ?? DEFAULT_CENTER}
           stops={stops}
           route={route}
@@ -415,6 +454,7 @@ export default function Estimate() {
       <TripMap
         cameraRef={cameraRef}
         styleKey={styleKey}
+        surfaceView={false}
         initialCenter={me ?? DEFAULT_CENTER}
         stops={stops}
         route={route}
@@ -425,7 +465,13 @@ export default function Estimate() {
         onPress={onMapPress}
       />
 
-      <View style={[styles.top, { top: insets.top + 6 }]}>
+      <View
+        style={[styles.top, { top: insets.top + 6 }]}
+        onLayout={(event) => {
+          const height = Math.ceil(event.nativeEvent.layout.height);
+          setTopPanelHeight((previous) => (previous === height ? previous : height));
+        }}
+      >
         <View style={styles.endpointStack}>
           {searchOpen && endpoint === 'start' ? (
             <View style={styles.endpointSearch}>
@@ -494,16 +540,8 @@ export default function Estimate() {
         )}
       </View>
 
-      {!searchOpen && <MapControlGroup style={{ top: insets.top + 140 }}>
+      {!searchOpen && topPanelHeight > 0 && <MapControlGroup style={{ top: insets.top + 6 + topPanelHeight + 6 }}>
         <MapStyleSwitcher />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose vehicle type"
-          onPress={() => setVehicleOpen(true)}
-          style={styles.sideButton}
-        >
-          <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
-        </Pressable>
         <LocateButton onPress={locateMe} busy={locating} />
       </MapControlGroup>}
       <OptionSheet
@@ -520,24 +558,34 @@ export default function Estimate() {
         onClose={() => setVehicleOpen(false)}
       />
 
-      {(dest || busy || error) && (
+      {(dest || busy || error) && !searchOpen && (
         <ScrollView
-          style={[styles.sheet, { bottom: Math.max(insets.bottom, 12) + 12 }]}
+          style={[styles.sheet, { bottom: Math.max(insets.bottom, 12) + 12, maxHeight: sheetExpanded ? '56%' : undefined }]}
           contentContainerStyle={styles.sheetContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {busy && <Text style={styles.hint}>Finding the route…</Text>}
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          {dest && (
+          <View style={styles.sheetHeader}>
+            <View style={styles.sheetHeading}>
+              <Text style={styles.title} numberOfLines={1}>{dest?.name ?? 'Route estimate'}</Text>
+              {route && <Text style={styles.accent}>{formatDistance(route.distanceM)} · {formatDuration(route.durationS)}</Text>}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={sheetExpanded ? 'Collapse estimate details' : 'Expand estimate details'}
+              accessibilityState={{ expanded: sheetExpanded }}
+              onPress={() => setSheetExpanded((expanded) => !expanded)}
+              style={styles.sheetToggle}
+            >
+              <Ionicons name={sheetExpanded ? 'chevron-down' : 'chevron-up'} size={20} color={colors.primaryStrong} />
+            </Pressable>
+          </View>
+          {sheetExpanded && (
             <>
-              <Text style={styles.title} numberOfLines={1}>{dest.name}</Text>
-              {!!dest.address && <Text style={styles.hint} numberOfLines={1}>{dest.address}</Text>}
+              {busy && !route && <Text style={styles.hint}>Finding the route…</Text>}
+              {!!error && <Text style={styles.error}>{error}</Text>}
+              {!!dest?.address && <Text style={styles.hint} numberOfLines={1}>{dest.address}</Text>}
               {startPlace && <Text style={styles.hint}>From {startPlace.name}</Text>}
-              {route && (
-                <Text style={styles.accent}>
-                  {formatDistance(route.distanceM)} · {formatDuration(route.durationS)}
-                </Text>
-              )}
               {routeOptions.length > 0 && (
                 <ScrollView
                   horizontal
@@ -583,12 +631,22 @@ export default function Estimate() {
                 </View>
               )}
               {route && !rate && <Text style={styles.hint}>No rate selected. Choose one to see the fare.</Text>}
-              <AnimatedButton
-                label={rate ? `Start meter · ${rate.name}` : 'Choose a rate'}
-                onPress={startMeter}
-                disabled={!route || busy}
-                style={{ marginTop: 14 }}
-              />
+              <View style={styles.startRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Vehicle type: ${VEHICLES[vehicle].label}`}
+                  onPress={() => setVehicleOpen(true)}
+                  style={styles.vehicleButton}
+                >
+                  <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
+                </Pressable>
+                <AnimatedButton
+                  label={rate ? 'Start meter' : 'Choose a rate'}
+                  onPress={startMeter}
+                  disabled={!route || busy}
+                  style={{ flex: 1 }}
+                />
+              </View>
               <AnimatedButton label="Clear" variant="ghost" onPress={clear} style={{ marginTop: 10 }} />
               <Text style={styles.note}>
                 The estimate uses the planned road distance. The meter measures the distance you actually drive.
@@ -606,6 +664,7 @@ const styles = StyleSheet.create({
   top: { position: 'absolute', left: 12, right: 12 },
   endpointStack: {
     gap: 4,
+    marginRight: 4,
     padding: 8,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
@@ -622,7 +681,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: colors.surfaceAlt,
   },
-  endpointSearch: { padding: 8, borderRadius: 10, backgroundColor: colors.surfaceAlt },
+  endpointSearch: { padding: 8, borderRadius: 10, backgroundColor: colors.surfaceAlt, marginVertical: 2 },
   endpointDivider: { height: 14, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
   dividerLine: { height: 1, flex: 1, backgroundColor: colors.border },
   endpointCopy: { flex: 1, minWidth: 0 },
@@ -630,18 +689,11 @@ const styles = StyleSheet.create({
   endpointValue: { color: colors.text, fontSize: 12, fontWeight: '700', marginTop: 1 },
   useMyLocation: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, marginBottom: 5, paddingHorizontal: 4 },
   useMyLocationText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
-  side: { position: 'absolute', right: 12, gap: 10, alignItems: 'center' },
-  sideButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.float,
-  },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  sheetHeading: { flex: 1, minWidth: 0, gap: 3 },
+  sheetToggle: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  startRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  vehicleButton: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.border },
   routeOptions: { marginTop: 12, marginHorizontal: -18 },
   routeOptionRow: { gap: 8, paddingHorizontal: 18 },
   routeOption: {
@@ -687,7 +739,8 @@ const styles = StyleSheet.create({
   liveHeader: {
     position: 'absolute',
     left: 12,
-    right: 76,
+    right: 12,
+    alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: radius.md,
@@ -696,8 +749,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadow.float,
   },
-  liveHeaderLabel: { color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  liveHeaderDestination: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 3 },
+  liveHeaderLabel: { color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1, textAlign: 'center' },
+  liveHeaderDestination: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 3, textAlign: 'center' },
   liveSheet: {
     position: 'absolute',
     left: 12,

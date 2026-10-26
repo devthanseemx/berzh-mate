@@ -46,8 +46,8 @@ const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
     right: 12,
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
+    gap: 6,
     zIndex: 5,
   },
   toggle: {
@@ -64,8 +64,9 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: colors.surfaceAlt },
   controls: {
     alignItems: 'center',
-    gap: 8,
-    padding: 6,
+    gap: 6,
+    width: 44,
+    paddingVertical: 6,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
