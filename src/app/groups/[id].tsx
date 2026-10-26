@@ -38,7 +38,7 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
     return (
         <Pressable onPress={onPress} style={[styles.chip, on && styles.chipOn]}>
             <View style={[styles.chipAvatar, on && styles.chipAvatarOn]}>
-                <Text style={[styles.chipAvatarText, on && { color: colors.onPrimary }]}>
+                <Text style={[styles.chipAvatarText, on && styles.chipAvatarTextOn]}>
                     {(label || '?').charAt(0).toUpperCase()}
                 </Text>
             </View>
@@ -53,6 +53,32 @@ function Section({ icon, children, style }: { icon: keyof typeof Ionicons.glyphM
         <View style={[styles.sectionHead, style]}>
             <Ionicons name={icon} size={15} color={colors.accent} />
             <Text style={styles.section}>{children}</Text>
+        </View>
+    );
+}
+
+function CollapsibleCard({
+    icon,
+    title,
+    children,
+}: {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    children: ReactNode;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    return (
+        <View style={styles.card}>
+            <Pressable
+                onPress={() => setExpanded((value) => !value)}
+                style={styles.collapseHeader}
+                accessibilityRole="button"
+                accessibilityState={{ expanded }}
+            >
+                <Section icon={icon}>{title}</Section>
+                <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
+            </Pressable>
+            {expanded && <View style={styles.collapseContent}>{children}</View>}
         </View>
     );
 }
@@ -86,8 +112,9 @@ export default function GroupDetail() {
             setError(null);
         } catch (e: any) {
             setError(e.message);
+            toast.error('Could not load trip', e.message);
         }
-    }, [id]);
+    }, [id, toast]);
 
     useFocusEffect(
         useCallback(() => {
@@ -153,36 +180,44 @@ export default function GroupDetail() {
             if (done) toast.success(done[0], done[1]);
             await load();
         } catch (e: any) {
-            setError(e.message);
-            toast.error('Something went wrong', e.message);
+            toast.error('Could not complete action', e.message);
         } finally {
             setBusy(false);
         }
     };
 
-    const saveMember = () =>
-        run(
-            () => addMember(id, memberEmail, memberName),
+    const showValidationError = (message: string) => toast.error('Check the details', message);
+
+    const saveMember = () => {
+        const email = memberEmail.trim();
+        if (!email) return showValidationError('Enter a Gmail address.');
+        if (!/^[^\s@]+@gmail\.com$/i.test(email)) return showValidationError('Enter a valid Gmail address.');
+        return run(
+            () => addMember(id, email, memberName.trim()),
             () => {
                 setMemberEmail('');
                 setMemberName('');
             },
             ['Added', 'Person added to the trip.']
         );
+    };
 
     const saveExpense = () => {
-        if (!paidBy) return setError('Choose who paid.');
-        if (!expName.trim()) return setError('Enter a name for the expense.');
-        if (!(Number(qty) > 0)) return setError('Quantity must be more than 0.');
-        if (price.trim() === '' || Number(price) < 0) return setError('Enter a price.');
-        if (!included.length) return setError('Choose at least one person to split with.');
+        const unitPrice = Number(price);
+        if (!paidBy) return showValidationError('Choose who paid for this expense.');
+        if (!expName.trim()) return showValidationError('Enter a name for the expense.');
+        if (!(Number(qty) > 0)) return showValidationError('Quantity must be more than 0.');
+        if (price.trim() === '' || !Number.isFinite(unitPrice) || unitPrice < 0) {
+            return showValidationError('Enter a valid price.');
+        }
+        if (!included.length) return showValidationError('Choose at least one person to split with.');
         return run(
             () =>
                 addExpense({
                     group: id,
                     name: expName,
                     quantity: Number(qty),
-                    unitPrice: Number(price),
+                    unitPrice,
                     paidBy,
                     sharedBy: included,
                 }),
@@ -196,8 +231,8 @@ export default function GroupDetail() {
     };
 
     const savePayment = () => {
-        if (!payMember) return setError('Choose who paid.');
-        if (!(Number(payAmount) > 0)) return setError('Enter an amount greater than 0.');
+        if (!payMember) return showValidationError('Choose who made the payment.');
+        if (!(Number(payAmount) > 0)) return showValidationError('Enter an amount greater than 0.');
         return run(
             () => recordPayment({ group: id, member: payMember, amount: Number(payAmount), note: payNote }),
             () => {
@@ -267,7 +302,7 @@ export default function GroupDetail() {
                 message: `Join my trip "${group?.name ?? ''}" on Berzh Mate.\nCode: ${code}\n${url}`,
             });
         } catch (e: any) {
-            setError(e.message);
+            toast.error('Could not create invite', e.message);
         }
     };
 
@@ -277,7 +312,7 @@ export default function GroupDetail() {
             await Clipboard.setStringAsync(`Join my trip on Berzh Mate. Code: ${code} ${url}`);
             toast.success('Copied', 'Invite is in your clipboard.');
         } catch (e: any) {
-            setError(e.message);
+            toast.error('Could not copy invite', e.message);
         }
     };
 
@@ -336,11 +371,8 @@ export default function GroupDetail() {
                     <AnimatedButton label="Live map" variant="ghost" onPress={() => router.push(`/groups/live/${id}`)} style={{ marginTop: 14 }} />
                 </View>
 
-                {error && <Text style={styles.error}>{error}</Text>}
-
                 {/* Balances */}
-                <View style={styles.card}>
-                    <Section icon="wallet-outline">Balances</Section>
+                <CollapsibleCard icon="wallet-outline" title={`Balances (${summary.balances.length})`}>
                     {summary.balances.map((b) => {
                         const settled = Math.abs(b.net) < 0.005;
                         return (
@@ -350,22 +382,18 @@ export default function GroupDetail() {
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.rowName} numberOfLines={1}>{b.name}</Text>
-                                    <Text style={styles.muted}>paid {money(b.paid + b.advance)} · share {money(b.owed)}</Text>
+                                    <Text style={styles.balanceDetail}>Paid: {money(b.paid + b.advance)}</Text>
+                                    <Text style={styles.balanceDetail}>Share: {money(b.owed)}</Text>
                                 </View>
-                                <View
-                                    style={[
-                                        styles.netPill,
-                                        settled ? styles.netSettled : b.net > 0 ? styles.netGet : styles.netOwe,
-                                    ]}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.netPillText,
-                                            settled ? { color: colors.muted } : b.net > 0 ? { color: '#065F46' } : { color: colors.danger },
-                                        ]}
-                                    >
-                                        {settled ? 'settled' : b.net > 0 ? `gets ${money(b.net)}` : `owes ${money(-b.net)}`}
+                                <View style={[styles.netBadge, settled ? styles.netSettled : b.net > 0 ? styles.netGet : styles.netOwe]}>
+                                    <Text style={[styles.netLabel, settled ? { color: colors.muted } : b.net > 0 ? styles.netGetText : styles.netOweText]}>
+                                        {settled ? 'Settled' : b.net > 0 ? 'Gets' : 'Owes'}
                                     </Text>
+                                    {!settled && (
+                                        <Text style={[styles.netAmount, b.net > 0 ? styles.netGetText : styles.netOweText]} numberOfLines={1} adjustsFontSizeToFit>
+                                            {money(Math.abs(b.net))}
+                                        </Text>
+                                    )}
                                 </View>
                             </View>
                         );
@@ -380,9 +408,8 @@ export default function GroupDetail() {
                         </Text>
                     ))}
                     {summary.settlements.length === 0 && <Text style={styles.muted}>Everyone is settled.</Text>}
-                </View>
+                </CollapsibleCard>
 
-                {/* Payments made later */}
                 {/* Payments into the trip collection (owner only) */}
                 {isOwner && !finished && members.length > 0 && (
                     <View style={styles.card}>
@@ -401,8 +428,7 @@ export default function GroupDetail() {
                 )}
 
                 {data && data.payments.length > 0 && (
-                    <View style={styles.card}>
-                        <Section icon="card-outline">Payments into the collection ({data.payments.length})</Section>
+                    <CollapsibleCard icon="card-outline" title={`Payments into collection (${data.payments.length})`}>
                         {data.payments.map((p) => (
                             <View key={p.id} style={styles.expense}>
                                 <View style={{ flex: 1 }}>
@@ -431,64 +457,12 @@ export default function GroupDetail() {
                                 )}
                             </View>
                         ))}
-                    </View>
+                    </CollapsibleCard>
                 )}
-
-                {/* Invite */}
-                {!finished && myMember && (
-                    <View style={styles.card}>
-                        <Section icon="person-add-outline">Invite people</Section>
-                        <Text style={styles.muted}>Share the link or code through WhatsApp, Gmail, or any app. Links expire after 7 days.</Text>
-                        {invite && <Text style={styles.code}>Code: {invite.code}</Text>}
-                        <View style={styles.twoCol}>
-                            <AnimatedButton label="Share" onPress={shareLink} disabled={busy} icon={<Ionicons name="share-outline" size={17} color={colors.onPrimary} />} style={{ flex: 1 }} />
-                            <AnimatedButton label="Copy" variant="ghost" onPress={copyLink} disabled={busy} icon={<Ionicons name="copy-outline" size={17} color={colors.text} />} style={{ flex: 1 }} />
-                        </View>
-                        {isOwner && <AnimatedButton label="Revoke all links" variant="danger" onPress={revokeLinks} disabled={busy} style={{ marginTop: 10 }} />}
-                    </View>
-                )}
-
-                {/* People */}
-                <View style={styles.card}>
-                    <Section icon="people-outline">People ({members.length})</Section>
-                    {members.map((m) => {
-                        const canRemove = isOwner && m.user_id !== group.owner_id && !finished;
-                        return (
-                            <View key={m.id} style={styles.row}>
-                                <View style={styles.avatarSm}>
-                                    <Text style={styles.avatarSmText}>{(m.name || m.email || '?').charAt(0).toUpperCase()}</Text>
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.rowName} numberOfLines={1}>
-                                        {m.name || m.email} {m.user_id === me ? '(you)' : ''}
-                                    </Text>
-                                    <Text style={styles.muted} numberOfLines={1}>
-                                        {m.email}
-                                        {m.user_id ? '' : ' · not signed in yet'}
-                                    </Text>
-                                </View>
-                                {canRemove && (
-                                    <Pressable onPress={() => confirmRemove(m.id, m.name || m.email)}>
-                                        <Text style={[styles.link, { color: colors.danger }]}>Remove</Text>
-                                    </Pressable>
-                                )}
-                            </View>
-                        );
-                    })}
-
-                    {isOwner && !finished && (
-                        <View style={{ marginTop: 12, gap: 8 }}>
-                            <TextField label="Gmail address" value={memberEmail} onChangeText={setMemberEmail} keyboard="email-address" placeholder="friend@gmail.com" />
-                            <TextField label="Name (optional)" value={memberName} onChangeText={setMemberName} placeholder="Nimal" />
-                            <AnimatedButton label="Add person" variant="ghost" disabled={busy || !memberEmail} onPress={saveMember} />
-                        </View>
-                    )}
-                </View>
 
                 {/* Add expense */}
                 {!finished && myMember && (
-                    <View style={styles.card}>
-                        <Section icon="receipt-outline">Add expense</Section>
+                    <CollapsibleCard icon="receipt-outline" title="Add expense">
                         <Text style={styles.hint}>
                             Adding as {myMember.name || myMember.email}. Your name will show as “added by” on this expense.
                         </Text>
@@ -529,12 +503,11 @@ export default function GroupDetail() {
                         </Text>
 
                         <AnimatedButton label={busy ? 'Saving…' : 'Add expense'} disabled={busy} onPress={saveExpense} style={{ marginTop: 14 }} />
-                    </View>
+                    </CollapsibleCard>
                 )}
 
                 {/* Expenses */}
-                <View style={styles.card}>
-                    <Section icon="list-outline">Expenses ({data.expenses.length})</Section>
+                <CollapsibleCard icon="list-outline" title={`Expenses (${data.expenses.length})`}>
                     {data.expenses.length === 0 && <Text style={styles.muted}>No expenses yet.</Text>}
                     {data.expenses.map((e) => {
                         const excluded = members.filter((m) => !e.shares.includes(m.id));
@@ -574,16 +547,79 @@ export default function GroupDetail() {
                             </View>
                         );
                     })}
-                </View>
+                </CollapsibleCard>
+
+                {/* People */}
+                <CollapsibleCard icon="people-outline" title={`People (${members.length})`}>
+                    {members.map((m) => {
+                        const canRemove = isOwner && m.user_id !== group.owner_id && !finished;
+                        return (
+                            <View key={m.id} style={styles.row}>
+                                <View style={styles.avatarSm}>
+                                    <Text style={styles.avatarSmText}>{(m.name || m.email || '?').charAt(0).toUpperCase()}</Text>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.rowName} numberOfLines={1}>
+                                        {m.name || m.email} {m.user_id === me ? '(you)' : ''}
+                                    </Text>
+                                    <Text style={styles.muted} numberOfLines={1}>
+                                        {m.email}
+                                        {m.user_id ? '' : ' · not signed in yet'}
+                                    </Text>
+                                </View>
+                                {canRemove && (
+                                    <Pressable onPress={() => confirmRemove(m.id, m.name || m.email)}>
+                                        <Text style={[styles.link, { color: colors.danger }]}>Remove</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        );
+                    })}
+
+                    {isOwner && !finished && (
+                        <View style={{ marginTop: 12, gap: 8 }}>
+                            <TextField label="Gmail address" value={memberEmail} onChangeText={setMemberEmail} keyboard="email-address" placeholder="friend@gmail.com" />
+                            <TextField label="Name (optional)" value={memberName} onChangeText={setMemberName} placeholder="Nimal" />
+                            <AnimatedButton label="Add person" variant="ghost" disabled={busy} onPress={saveMember} />
+                        </View>
+                    )}
+                </CollapsibleCard>
+
+                {/* Invite */}
+                {!finished && myMember && (
+                    <View style={styles.card}>
+                        <Section icon="person-add-outline">Invite people</Section>
+                        <Text style={styles.muted}>Share the link or code through WhatsApp, Gmail, or any app. Links expire after 7 days.</Text>
+                        {invite && <Text style={styles.code}>Code: {invite.code}</Text>}
+                        <View style={styles.twoCol}>
+                            <AnimatedButton label="Share" onPress={shareLink} disabled={busy} icon={<Ionicons name="share-outline" size={17} color={colors.onPrimary} />} style={{ flex: 1 }} />
+                            <AnimatedButton label="Copy" variant="ghost" onPress={copyLink} disabled={busy} icon={<Ionicons name="copy-outline" size={17} color={colors.text} />} style={{ flex: 1 }} />
+                        </View>
+                        {isOwner && <AnimatedButton label="Revoke all links" variant="danger" onPress={revokeLinks} disabled={busy} style={{ marginTop: 10 }} />}
+                    </View>
+                )}
 
                 {/* Owner actions */}
                 {isOwner && (
                     <View style={styles.card}>
                         <Section icon="ellipsis-horizontal-circle-outline">Trip actions</Section>
-                        <View style={styles.twoCol}>
-                            <AnimatedButton label={busy ? 'Sending…' : 'Email trip'} variant="ghost" disabled={busy} onPress={sendEmails} icon={<Ionicons name="mail-outline" size={17} color={colors.text} />} style={{ flex: 1 }} />
-                            {!finished && <AnimatedButton label="End" variant="danger" disabled={busy} onPress={confirmEnd} icon={<Ionicons name="flag-outline" size={17} color="#FFFFFF" />} style={{ flex: 1 }} />}
-                        </View>
+                        <Text style={styles.muted}>Send each person their expense breakdown and amount owed.</Text>
+                        <AnimatedButton
+                            label={busy ? 'Sending summaries…' : 'Email expense summaries'}
+                            variant="ghost"
+                            disabled={busy}
+                            onPress={sendEmails}
+                            icon={<Ionicons name="mail-outline" size={17} color={colors.text} />}
+                        />
+                        {!finished && (
+                            <AnimatedButton
+                                label="End trip"
+                                variant="danger"
+                                disabled={busy}
+                                onPress={confirmEnd}
+                                icon={<Ionicons name="flag-outline" size={17} color="#FFFFFF" />}
+                            />
+                        )}
                     </View>
                 )}
             </ScrollView>
@@ -609,14 +645,20 @@ const styles = StyleSheet.create({
     heroLabel: { color: colors.muted, fontSize: 12 },
     avatarSm: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
     avatarSmText: { color: colors.accent, fontWeight: '800', fontSize: 15, fontFamily: fonts.bold },
-    netPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, overflow: 'hidden' },
+    netBadge: { minWidth: 78, alignItems: 'flex-end', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 12, overflow: 'hidden' },
     netGet: { backgroundColor: '#D1FAE5' },
     netOwe: { backgroundColor: '#FFE4E6' },
     netSettled: { backgroundColor: colors.surfaceAlt },
-    netPillText: { fontSize: 12, fontWeight: '700' },
+    netLabel: { fontSize: 10, fontWeight: '700', textAlign: 'right' },
+    netAmount: { fontSize: 13, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
+    netGetText: { color: '#065F46' },
+    netOweText: { color: colors.danger },
     card: { ...cardStyle, borderRadius: radius.lg, padding: 16, gap: 8 },
     section: { color: colors.text, fontWeight: '800', fontSize: 16 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  balanceDetail: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  collapseHeader: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  collapseContent: { gap: 8 },
     label: { color: colors.muted, fontSize: 13 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
     balanceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.border },
@@ -627,7 +669,6 @@ const styles = StyleSheet.create({
     hint: { color: colors.accent, fontSize: 12 },
     code: { color: colors.accent, fontWeight: '800', letterSpacing: 2, fontSize: 18 },
     link: { color: colors.accent, fontWeight: '600' },
-    error: { color: colors.danger },
     line: { color: colors.accent, fontWeight: '700' },
     twoCol: { flexDirection: 'row', gap: 10 },
     inline: { gap: 6, paddingBottom: 8 },
@@ -645,10 +686,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   chipAvatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  chipAvatarOn: { backgroundColor: colors.primaryStrong },
+  chipAvatarOn: { backgroundColor: '#2563EB' },
   chipAvatarText: { fontSize: 10, fontWeight: '700', color: colors.text },
-    chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-    chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-    chipTextOn: { color: colors.onPrimary },
+  chipAvatarTextOn: { color: '#FFFFFF' },
+  chipOn: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
+  chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  chipTextOn: { color: '#1D4ED8' },
     expense: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderColor: colors.border },
 });
