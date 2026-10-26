@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Linking from 'expo-linking';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { checkForUpdate, installedVersion, type UpdateInfo } from '../services/updates';
 import { colors, radius } from '../theme/colors';
 import { AnimatedButton } from './AnimatedButton';
+import { UpdatePrompt } from './UpdatePrompt';
 
 const DISMISSED_KEY = 'berzh-mate-dismissed-update';
 
 export function UpdateBanner() {
   const [info, setInfo] = useState<UpdateInfo>(null);
+  const [promptOpen, setPromptOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -26,27 +27,31 @@ export function UpdateBanner() {
     })();
   }, []);
 
-  if (!info) return null;
-
   const later = async () => {
+    if (!info) return;
     await AsyncStorage.setItem(DISMISSED_KEY, info.version);
     setInfo(null);
   };
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Update available: v{info.version}</Text>
-      <Text style={styles.sub}>You have v{installedVersion}. Download the new version to get the latest changes.</Text>
-      {!!info.notes && (
-        <Text style={styles.notes} numberOfLines={4}>
-          {info.notes}
-        </Text>
+    <>
+      {info && (
+        <View style={styles.card}>
+          <Text style={styles.title}>Update available: v{info.version}</Text>
+          <Text style={styles.sub}>You have v{installedVersion}. Download the new version to get the latest changes.</Text>
+          {!!info.notes && (
+            <Text style={styles.notes} numberOfLines={4}>
+              {info.notes}
+            </Text>
+          )}
+          <View style={styles.row}>
+            <AnimatedButton label="Download" onPress={() => setPromptOpen(true)} style={{ flex: 1 }} />
+            <AnimatedButton label="Later" variant="ghost" onPress={later} style={{ flex: 1 }} />
+          </View>
+        </View>
       )}
-      <View style={styles.row}>
-        <AnimatedButton label="Download" onPress={() => Linking.openURL(info.url)} style={{ flex: 1 }} />
-        <AnimatedButton label="Later" variant="ghost" onPress={later} style={{ flex: 1 }} />
-      </View>
-    </View>
+      <UpdatePrompt info={info} visible={promptOpen} onClose={() => setPromptOpen(false)} />
+    </>
   );
 }
 

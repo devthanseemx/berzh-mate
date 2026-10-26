@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { BackButton } from '../components/BackButton';
 import { LocateButton } from '../components/LocateButton';
+import { MapControlGroup } from '../components/MapControlGroup';
 import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
 import { DEFAULT_CENTER, TripMap } from '../components/TripMap';
 import { haversine } from '../services/geo';
@@ -203,10 +204,10 @@ export default function Navigate() {
         )}
       </View>
 
-      <View style={[styles.side, { top: insets.top + 6 }]}>
+      <MapControlGroup style={{ top: insets.top + 6 }}>
         <MapStyleSwitcher />
         <LocateButton onPress={recenter} busy={locating} />
-      </View>
+      </MapControlGroup>
 
       {/* Compact bottom sheet — everything in one small card */}
       <MotiView

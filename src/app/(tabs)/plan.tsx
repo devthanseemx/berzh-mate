@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
 import { useConfirm } from '../../components/Confirm';
 import { LocateButton } from '../../components/LocateButton';
+import { MapControlGroup } from '../../components/MapControlGroup';
 import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { OptionSheet } from '../../components/OptionSheet';
 import { SearchBar } from '../../components/SearchBar';
@@ -746,25 +747,27 @@ export default function Plan() {
         )}
       </View>
 
-      {!searchOpen && <View style={[styles.side, { top: insets.top + (planningMode === 'distance' ? 246 : 220) }]}>
-        <MapStyleSwitcher />
-        <Pressable
-          accessibilityLabel="Saved places"
-          onPress={() => setSavedOpen(true)}
-          style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
-        >
-          <Ionicons name="bookmark-outline" size={20} color={colors.primaryStrong} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Vehicle type"
-          onPress={() => setVehOpen(true)}
-          style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
-        >
-          <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
-          {vehicle !== 'car' && <View style={styles.sideDot} />}
-        </Pressable>
-        <LocateButton onPress={recenter} />
-      </View>}
+      {!searchOpen && (
+        <MapControlGroup style={{ top: insets.top + (planningMode === 'distance' ? 214 : 188) }}>
+          <MapStyleSwitcher />
+          <Pressable
+            accessibilityLabel="Saved places"
+            onPress={() => setSavedOpen(true)}
+            style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
+          >
+            <Ionicons name="bookmark-outline" size={20} color={colors.primaryStrong} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Vehicle type"
+            onPress={() => setVehOpen(true)}
+            style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
+          >
+            <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
+            {vehicle !== 'car' && <View style={styles.sideDot} />}
+          </Pressable>
+          <LocateButton onPress={recenter} />
+        </MapControlGroup>
+      )}
 
       <OptionSheet
         visible={vehOpen}

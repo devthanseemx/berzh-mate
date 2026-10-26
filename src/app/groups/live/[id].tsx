@@ -7,6 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../../../components/Toast';
 import { AnimatedButton } from '../../../components/AnimatedButton';
+import { MapControlGroup } from '../../../components/MapControlGroup';
 import { MapStyleSwitcher } from '../../../components/MapStyleSwitcher';
 import { supabase } from '../../../services/auth';
 import { currentUserId, getGroup, sendLocation, setSharing } from '../../../services/groups';
@@ -220,9 +221,9 @@ export default function LiveGroup() {
           })}
         </Mapbox.MapView>
 
-        <View style={[styles.top, { top: insets.top + 6 }]}>
+        <MapControlGroup style={{ top: insets.top + 6 }}>
           <MapStyleSwitcher />
-        </View>
+        </MapControlGroup>
       </View>
 
       <View style={styles.sheet}>

@@ -70,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           animate={{ opacity: 1, translateY: 0, scale: 1 }}
           exit={{ opacity: 0, translateY: 16 }}
           transition={{ type: 'timing', duration: 220 }}
-          style={[styles.wrap, { bottom: insets.bottom + 72 }]}
+          style={[styles.wrap, { bottom: Math.max(insets.bottom, 8) + 6 }]}
         >
           <Pressable
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}

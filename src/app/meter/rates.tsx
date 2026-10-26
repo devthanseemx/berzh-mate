@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -86,6 +87,22 @@ export default function Rates() {
     <SafeAreaView style={styles.safe}>
       <BackButton />
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Meter rates</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add new rate"
+            accessibilityState={{ disabled: !!form }}
+            disabled={!!form}
+            onPress={() => {
+              setError(null);
+              setForm({ name: '', price: '', base: '' });
+            }}
+            style={({ pressed }) => [styles.addButton, pressed && !form && styles.addButtonPressed, !!form && styles.addButtonDisabled]}
+          >
+            <Ionicons name="add" size={24} color={colors.onPrimary} />
+          </Pressable>
+        </View>
         <Text style={styles.hint}>Tap a rate to use it for the next trip.</Text>
 
         {rates.map((r) => {
@@ -114,7 +131,7 @@ export default function Rates() {
           );
         })}
 
-        {rates.length === 0 && <Text style={styles.hint}>No rates yet. Add one below.</Text>}
+        {rates.length === 0 && <Text style={styles.hint}>No rates yet. Tap + to add your first rate.</Text>}
 
         {form ? (
           <View style={styles.form}>
@@ -127,10 +144,7 @@ export default function Rates() {
             <AnimatedButton label="Cancel" variant="ghost" onPress={() => { setForm(null); setError(null); }} style={{ marginTop: 10 }} />
           </View>
         ) : (
-          <>
-            {error && <Text style={styles.error}>{error}</Text>}
-            <AnimatedButton label="Add new rate" onPress={() => setForm({ name: '', price: '', base: '' })} style={{ marginTop: 10 }} />
-          </>
+          error && <Text style={styles.error}>{error}</Text>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -140,6 +154,18 @@ export default function Rates() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingTop: 64, gap: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  title: { color: colors.text, fontSize: 26, fontWeight: '800' },
+  addButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonPressed: { opacity: 0.85 },
+  addButtonDisabled: { opacity: 0.45 },
   hint: { color: colors.muted },
   card: {
     flexDirection: 'row',

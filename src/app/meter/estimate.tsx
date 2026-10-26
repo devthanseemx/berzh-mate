@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Mapbox from '@rnmapbox/maps';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
 import { LocateButton } from '../../components/LocateButton';
+import { MapControlGroup } from '../../components/MapControlGroup';
 import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { OptionSheet } from '../../components/OptionSheet';
 import { SearchBar } from '../../components/SearchBar';
+import { useToast } from '../../components/Toast';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
 import { VehicleIcon } from '../../components/vehicleIcons';
 import {
@@ -53,6 +55,7 @@ export default function Estimate() {
   const run = useMeter((s) => s.run);
   const stopTrip = useMeter((s) => s.stopTrip);
   const saveHistory = useSettings((s) => s.saveHistory);
+  const toast = useToast();
   const focusCoordinate = useCallback(
     (coordinate: LngLat, zoomLevel = 14) => {
       cameraRef.current?.setCamera({
@@ -208,7 +211,7 @@ export default function Estimate() {
     try {
       const position = await getQuickLocation();
       if (!position) {
-        Alert.alert('Location unavailable', 'Allow location access and turn on GPS to find your current location.');
+        toast.error('Location unavailable', 'Allow location access and turn on GPS to find your current location.');
         return;
       }
       setMe(position);
@@ -216,7 +219,7 @@ export default function Estimate() {
     } finally {
       setLocating(false);
     }
-  }, [focusCoordinate]);
+  }, [focusCoordinate, toast]);
 
   const chooseMapPoint = useCallback(
     async (coord: LngLat) => {
@@ -269,7 +272,7 @@ export default function Estimate() {
     }
     const ok = await requestNavigationPermissions();
     if (!ok) {
-      Alert.alert('Location needed', 'Allow location to measure the trip.');
+      toast.error('Location needed', 'Allow location access to measure the trip.');
       return;
     }
     useMeter.getState().startTrip({
@@ -281,9 +284,10 @@ export default function Estimate() {
       await startMeterTracking();
       setLiveMeter(true);
       setNow(Date.now());
+      toast.success('Trip started', 'The meter is now running.');
     } catch (e: unknown) {
       useMeter.getState().reset();
-      Alert.alert('Meter could not start', e instanceof Error ? e.message : 'Could not start location tracking.');
+      toast.error('Meter could not start', e instanceof Error ? e.message : 'Could not start location tracking.');
     }
   };
 
@@ -293,6 +297,7 @@ export default function Estimate() {
     try {
       await stopMeterTracking();
       const finished = stopTrip();
+      let saved = false;
       if (finished?.rate && finished.startedAt && finished.endedAt && saveHistory) {
         await saveFareTrip({
           rate: finished.rate,
@@ -303,12 +308,14 @@ export default function Estimate() {
           endedAt: finished.endedAt,
           path: finished.path,
         });
+        saved = true;
       }
       setNow(Date.now());
+      toast.success('Trip completed', saved ? 'Saved to your trip history.' : 'History saving is off in Settings.');
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Could not finish and save the trip.';
       setMeterError(message);
-      Alert.alert('Trip not saved', message);
+      toast.error('Trip not saved', message);
     } finally {
       setMeterBusy(false);
     }
@@ -340,6 +347,10 @@ export default function Estimate() {
           candidate={null}
           showNames
         />
+        <MapControlGroup style={{ top: insets.top + 6 }}>
+          <MapStyleSwitcher />
+          <LocateButton onPress={locateMe} busy={locating} />
+        </MapControlGroup>
         <View style={[styles.liveHeader, { top: insets.top + 12 }]}>
           <Text style={styles.liveHeaderLabel}>
             {run.status === 'running' ? 'METER RUNNING' : 'TRIP COMPLETE'}
@@ -483,7 +494,7 @@ export default function Estimate() {
         )}
       </View>
 
-      {!searchOpen && <View style={[styles.side, { top: insets.top + 172 }]}>
+      {!searchOpen && <MapControlGroup style={{ top: insets.top + 140 }}>
         <MapStyleSwitcher />
         <Pressable
           accessibilityRole="button"
@@ -494,7 +505,7 @@ export default function Estimate() {
           <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
         </Pressable>
         <LocateButton onPress={locateMe} busy={locating} />
-      </View>}
+      </MapControlGroup>}
       <OptionSheet
         visible={vehicleOpen}
         title="Vehicle type"

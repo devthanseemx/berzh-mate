@@ -17,9 +17,7 @@ import { fonts } from '../../theme/font';
 import { fareFor, money } from '../../utils/fare';
 import { formatDistance } from '../../utils/format';
 
-// A finished summary older than this is cleared when the screen opens —
-// the trip itself stays in History.
-const STALE_DONE_MS = 15 * 60 * 1000;
+const SUMMARY_VISIBLE_MS = 3000;
 
 // Time as m:ss, or h:mm:ss after an hour.
 function clock(totalSeconds: number): string {
@@ -44,6 +42,7 @@ export default function MeterScreen() {
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showNewTripButton, setShowNewTripButton] = useState(false);
 
   const activeRate = rates.find((r) => r.id === activeRateId) ?? null;
 
@@ -56,10 +55,20 @@ export default function MeterScreen() {
     if (run.status === 'running') startMeterTracking().catch(() => {});
   }, []);
 
-  // Don't show yesterday's finished summary forever — clear it after 15 minutes.
-  // (reset is a stable zustand action, so this runs once on mount.)
+  // Keep the summary briefly, but preserve the completed trip in History.
   useEffect(() => {
-    if (run.status === 'done' && run.endedAt && Date.now() - run.endedAt > STALE_DONE_MS) reset();
+    if (run.status !== 'done' || !run.endedAt) return;
+    const remaining = SUMMARY_VISIBLE_MS - (Date.now() - run.endedAt);
+    if (remaining <= 0) {
+      setShowNewTripButton(true);
+      reset();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setShowNewTripButton(true);
+      reset();
+    }, remaining);
+    return () => clearTimeout(timer);
   }, [reset, run.status, run.endedAt]);
 
   // Refresh the display every second while a trip is running.
@@ -90,7 +99,17 @@ export default function MeterScreen() {
     }
     setSaveError(null);
     startTrip({ name: activeRate.name, pricePerKm: activeRate.price_per_km, baseFare: activeRate.base_fare });
-    await startMeterTracking();
+    try {
+      await startMeterTracking();
+      setShowNewTripButton(false);
+      toast.success('Trip started', 'The meter is now running.');
+    } catch (error: unknown) {
+      reset();
+      toast.error(
+        'Could not start the meter',
+        error instanceof Error ? error.message : 'Location tracking could not be started.'
+      );
+    }
   };
 
   const stop = async () => {
@@ -99,7 +118,11 @@ export default function MeterScreen() {
     const done = stopTrip();
     setBusy(false);
 
-    if (!done?.rate || !done.startedAt || !done.endedAt || !saveHistory) return;
+    if (!done?.rate || !done.startedAt || !done.endedAt) return;
+    if (!saveHistory) {
+      toast.success('Trip completed', 'History saving is turned off in Settings.');
+      return;
+    }
     try {
       await saveFareTrip({
         rate: done.rate,
@@ -176,7 +199,7 @@ export default function MeterScreen() {
         </View>
 
         {run.status === 'idle' && (
-          <AnimatedButton label="Start trip" onPress={start} disabled={!activeRate} style={{ marginTop: 18 }} />
+          <AnimatedButton label={showNewTripButton ? 'New trip' : 'Start trip'} onPress={start} disabled={!activeRate} style={{ marginTop: 18 }} />
         )}
 
         {run.status === 'running' && (
@@ -195,7 +218,14 @@ export default function MeterScreen() {
               {saveHistory && !saveError ? 'Saved to your trip history.' : saveHistory ? '' : 'Not saved (history is off in Settings).'}
             </Text>
             {saveError && <Text style={styles.error}>{saveError}</Text>}
-            <AnimatedButton label="New trip" onPress={reset} style={{ marginTop: 14 }} />
+            <AnimatedButton
+              label="New trip"
+              onPress={() => {
+                setShowNewTripButton(true);
+                reset();
+              }}
+              style={{ marginTop: 14 }}
+            />
           </MotiView>
         )}
 

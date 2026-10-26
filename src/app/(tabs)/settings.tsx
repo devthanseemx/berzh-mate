@@ -2,14 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useConfirm } from '../../components/Confirm';
 import { SavedPlacesSheet } from '../../components/SavedPlacesSheet';
 import { useToast } from '../../components/Toast';
+import { UpdatePrompt } from '../../components/UpdatePrompt';
 import { signOut } from '../../services/auth';
 import { deleteAccount } from '../../services/profile';
-import { checkForUpdate, installedVersion } from '../../services/updates';
+import { checkForUpdate, installedVersion, type UpdateInfo } from '../../services/updates';
 import { useSavedPlaces } from '../../store/savedPlaces';
 import { useSettings } from '../../store/settings';
 import { cardStyle, colors, radius } from '../../theme/colors';
@@ -57,6 +58,8 @@ export default function Settings() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [savedPlacesOpen, setSavedPlacesOpen] = useState(false);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo>(null);
+  const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -95,26 +98,13 @@ export default function Settings() {
     try {
       const update = await checkForUpdate();
       if (!update) {
-        Alert.alert('You’re up to date', `Berzh Mate ${installedVersion} is the latest available version.`);
+        toast.success('You’re up to date', `Berzh Mate ${installedVersion} is the latest version.`);
         return;
       }
-      Alert.alert(
-        `Update available · v${update.version}`,
-        update.notes || 'A newer version of Berzh Mate is available.',
-        [
-          { text: 'Later', style: 'cancel' },
-          {
-            text: 'Download',
-            onPress: () => {
-              void Linking.openURL(update.url).catch((error: unknown) => {
-                Alert.alert('Could not open download', error instanceof Error ? error.message : 'Try again later.');
-              });
-            },
-          },
-        ]
-      );
+      setUpdateInfo(update);
+      setUpdatePromptOpen(true);
     } catch (error: unknown) {
-      Alert.alert(
+      toast.error(
         'Could not check for updates',
         error instanceof Error ? error.message : 'Check your connection and try again.'
       );
@@ -125,7 +115,7 @@ export default function Settings() {
 
   const openMapData = () => {
     void Linking.openURL('https://www.openstreetmap.org/copyright').catch((error: unknown) => {
-      Alert.alert('Could not open map data information', error instanceof Error ? error.message : 'Try again later.');
+      toast.error('Could not open map data information', error instanceof Error ? error.message : 'Try again later.');
     });
   };
 
@@ -210,6 +200,11 @@ export default function Settings() {
           router.push({ pathname: '/plan', params: { saved: place.id } });
         }}
         onClose={() => setSavedPlacesOpen(false)}
+      />
+      <UpdatePrompt
+        info={updateInfo}
+        visible={updatePromptOpen}
+        onClose={() => setUpdatePromptOpen(false)}
       />
     </SafeAreaView>
   );

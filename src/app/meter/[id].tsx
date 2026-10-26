@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
+import { MapControlGroup } from '../../components/MapControlGroup';
+import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { getFareTrip, type FareTrip } from '../../services/fares';
 import { useMapPrefs } from '../../store/mapPrefs';
 import { cardStyle, colors, radius } from '../../theme/colors';
@@ -66,6 +68,9 @@ export default function FareDetail() {
           candidate={null}
           showNames={false}
         />
+        <MapControlGroup style={{ top: 12 }}>
+          <MapStyleSwitcher />
+        </MapControlGroup>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
