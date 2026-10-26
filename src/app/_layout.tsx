@@ -10,6 +10,7 @@ import '../services/meterLocation';
 import { completeAuthFromUrl } from '../services/auth';
 import { isGoogleMapsUrl } from '../services/googleMapsLinks';
 import { ConfirmProvider } from '../components/Confirm';
+import { UpdateSuccessNotice } from '../components/UpdateSuccessNotice';
 import { ToastProvider, useToast } from '../components/Toast';
 import { initSession, useSession } from '../store/session';
 import { colors } from '../theme/colors';
@@ -107,6 +108,7 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <AuthGate incomingMapUrl={incomingMapUrl} onIncomingMapHandled={() => setIncomingMapUrl(null)} />
         <WelcomeToast />
+        <UpdateSuccessNotice />
         <Stack
           screenOptions={{
             // No header bar at all — pushed screens render the floating BackButton,

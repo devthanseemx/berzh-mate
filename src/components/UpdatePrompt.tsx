@@ -5,6 +5,7 @@ import { useToast } from './Toast';
 import { downloadAndInstallUpdate, type UpdateInfo } from '../services/updates';
 import { colors, radius, shadow } from '../theme/colors';
 import { AnimatedButton } from './AnimatedButton';
+import { clearPendingInstallNotice, savePendingInstallNotice } from '../services/updateNotice';
 
 export function UpdatePrompt({
   info,
@@ -27,9 +28,15 @@ export function UpdatePrompt({
     setProgress(0);
     setErrorMessage(null);
     try {
+      await savePendingInstallNotice({ version: info.version, notes: info.notes });
       await downloadAndInstallUpdate(info, setProgress);
       onClose();
     } catch (error: unknown) {
+      try {
+        await clearPendingInstallNotice();
+      } catch (storageError: unknown) {
+        console.warn('Could not clear pending update details:', storageError);
+      }
       const message = error instanceof Error ? error.message : 'Please try again later.';
       setErrorMessage(message);
       toast.error('Could not install update', message);
