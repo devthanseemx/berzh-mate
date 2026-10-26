@@ -16,6 +16,7 @@ import { SavePlaceSheet } from '../../components/SavePlaceSheet';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
 import { useToast } from '../../components/Toast';
 import { VehicleIcon } from '../../components/vehicleIcons';
+import { resolveGoogleMapsLocation } from '../../services/googleMapsLinks';
 import {
   fetchAlternatives,
   reverseGeocode,
@@ -60,7 +61,7 @@ export default function Plan() {
   const confirm = useConfirm();
   const toast = useToast();
   // Deep-linked saved place from the Home strip: /plan?saved=<id>
-  const { saved: savedParam } = useLocalSearchParams<{ saved?: string }>();
+  const { saved: savedParam, mapsUrl } = useLocalSearchParams<{ saved?: string; mapsUrl?: string | string[] }>();
 
   const [me, setMe] = useState<LngLat | null>(null);
   const [candidate, setCandidate] = useState<PlaceResult | null>(null);
@@ -78,6 +79,7 @@ export default function Plan() {
   const [vehOpen, setVehOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const handledMapsUrl = useRef<string | null>(null);
 
   const styleKey = useMapPrefs((s) => s.styleKey);
   const stops = useTripStore((s) => s.stops);
@@ -150,6 +152,41 @@ export default function Plan() {
   const focus = useCallback((coord: LngLat, zoom = 15) => {
     cameraRef.current?.setCamera({ centerCoordinate: coord, zoomLevel: zoom, animationDuration: 700 });
   }, []);
+
+  const importGoogleMapsLink = useCallback(async (rawUrl: string) => {
+    try {
+      const sharedLocation = await resolveGoogleMapsLocation(rawUrl);
+      setPlanningMode('distance');
+      setStartPlace(null);
+      setSearchTarget('destination');
+      setSearchOpen(false);
+      setEstimateDestination({
+        id: `google-maps-${sharedLocation.coord[0]}-${sharedLocation.coord[1]}`,
+        name: sharedLocation.name,
+        address: 'Shared from Google Maps',
+        coord: sharedLocation.coord,
+      });
+      focus(sharedLocation.coord);
+      toast.success('Location opened', `${sharedLocation.name} is ready as your destination.`);
+    } catch (error: unknown) {
+      toast.error(
+        'Could not open location',
+        error instanceof Error ? error.message : 'Check the Google Maps link and try again.'
+      );
+    }
+  }, [focus, toast]);
+
+  useEffect(() => {
+    const sharedUrl = Array.isArray(mapsUrl) ? mapsUrl[0] : mapsUrl;
+    if (!sharedUrl) {
+      handledMapsUrl.current = null;
+      return;
+    }
+    if (handledMapsUrl.current === sharedUrl) return;
+    handledMapsUrl.current = sharedUrl;
+    router.setParams({ mapsUrl: undefined });
+    void importGoogleMapsLink(sharedUrl);
+  }, [importGoogleMapsLink, mapsUrl]);
 
   const recenter = useCallback(async () => {
     const pos = await getMyLocation();
@@ -631,7 +668,6 @@ export default function Plan() {
             <Text style={[styles.modeText, planningMode === 'multi' && styles.modeTextSelected]}>Multi-stop route</Text>
           </Pressable>
         </View>
-
         {planningMode === 'distance' ? (
           <>
             <View style={styles.endpointStack}>
@@ -710,7 +746,7 @@ export default function Plan() {
         )}
       </View>
 
-      {!searchOpen && <View style={[styles.side, { top: insets.top + (planningMode === 'distance' ? 202 : 176) }]}>
+      {!searchOpen && <View style={[styles.side, { top: insets.top + (planningMode === 'distance' ? 246 : 220) }]}>
         <MapStyleSwitcher />
         <Pressable
           accessibilityLabel="Saved places"

@@ -3,8 +3,9 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { MotiView } from 'moti';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AnimatedButton } from '../../components/AnimatedButton';
 import { listTrips, type TripRow } from '../../services/history';
 import { listFareTrips, type FareTripRow } from '../../services/fares';
 import { VEHICLES, type VehicleKey } from '../../services/geoapify';
@@ -73,6 +74,8 @@ export default function Home() {
   );
   const [showAllTrips, setShowAllTrips] = useState(false);
   const [savedPlacesOpen, setSavedPlacesOpen] = useState(false);
+  const [mapsLinkOpen, setMapsLinkOpen] = useState(false);
+  const [mapsLink, setMapsLink] = useState('');
 
   // Reloads every time the home screen comes back into view, so new trips appear.
   useFocusEffect(
@@ -235,6 +238,22 @@ export default function Home() {
           ))}
         </View>
 
+        <Pressable
+          onPress={() => setMapsLinkOpen(true)}
+          style={({ pressed }) => [styles.sharedMapWidget, pressed && styles.actionPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Open a shared Google Maps location"
+        >
+          <View style={styles.sharedMapIcon}>
+            <Ionicons name="link-outline" size={17} color={colors.accent} />
+          </View>
+          <View style={styles.sharedMapCopy}>
+            <Text style={styles.sharedMapTitle}>Shared a place with you?</Text>
+            <Text style={styles.sharedMapHint}>Open a Google Maps link</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={17} color={colors.muted} />
+        </Pressable>
+
         {/* Period selector — Week / Month / Year drives the stats and the chart */}
         <View style={styles.periodSeg}>
           {PERIODS.map((p) => (
@@ -385,6 +404,65 @@ export default function Home() {
         }}
         onClose={() => setSavedPlacesOpen(false)}
       />
+      <Modal
+        transparent
+        visible={mapsLinkOpen}
+        animationType="fade"
+        onRequestClose={() => setMapsLinkOpen(false)}
+      >
+        <View style={styles.mapsModalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMapsLinkOpen(false)} />
+          <View style={styles.mapsModalCard}>
+            <View style={styles.mapsModalHeading}>
+              <View style={styles.mapsModalIcon}>
+                <Ionicons name="map-outline" size={20} color={colors.accent} />
+              </View>
+              <View style={styles.mapsModalTitleWrap}>
+                <Text style={styles.mapsModalTitle}>Open a shared place</Text>
+                <Text style={styles.mapsModalHint}>Paste a Google Maps place or pin link.</Text>
+              </View>
+              <Pressable onPress={() => setMapsLinkOpen(false)} hitSlop={10} accessibilityLabel="Close">
+                <Ionicons name="close" size={22} color={colors.muted} />
+              </Pressable>
+            </View>
+            <TextInput
+              value={mapsLink}
+              onChangeText={setMapsLink}
+              placeholder="https://maps.app.goo.gl/..."
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              multiline
+              style={styles.mapsLinkInput}
+              accessibilityLabel="Google Maps link"
+            />
+            <Text style={styles.mapsModalHint}>
+              The shared location opens as your destination. Choose a start point and route in Plan.
+            </Text>
+            <View style={styles.mapsModalActions}>
+              <AnimatedButton
+                label="Cancel"
+                variant="ghost"
+                onPress={() => setMapsLinkOpen(false)}
+                style={{ flex: 1 }}
+              />
+              <AnimatedButton
+                label="Open location"
+                disabled={!mapsLink.trim()}
+                onPress={() => {
+                  const sharedUrl = mapsLink.trim();
+                  setMapsLink('');
+                  setMapsLinkOpen(false);
+                  router.push({ pathname: '/plan', params: { mapsUrl: sharedUrl } });
+                }}
+                icon={<Ionicons name="arrow-forward" size={17} color={colors.onPrimary} />}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <UpdateBanner />
     </SafeAreaView>
   );
@@ -442,6 +520,42 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.accent, fontWeight: '800', fontSize: 18, fontFamily: fonts.extrabold },
 
   actions: { flexDirection: 'row', gap: 10 },
+  sharedMapWidget: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  sharedMapIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.primarySoft },
+  sharedMapCopy: { flex: 1, gap: 2 },
+  sharedMapTitle: { color: colors.text, fontSize: 13, fontWeight: '700', fontFamily: fonts.bold },
+  sharedMapHint: { color: colors.muted, fontSize: 11 },
+  mapsModalBackdrop: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(15, 23, 42, 0.42)' },
+  mapsModalCard: { gap: 12, padding: 18, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  mapsModalHeading: { flexDirection: 'row', alignItems: 'center', gap: 11 },
+  mapsModalIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  mapsModalTitleWrap: { flex: 1, gap: 2 },
+  mapsModalTitle: { color: colors.text, fontSize: 16, fontWeight: '800', fontFamily: fonts.bold },
+  mapsModalHint: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  mapsLinkInput: {
+    minHeight: 82,
+    maxHeight: 130,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.input,
+    color: colors.text,
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  mapsModalActions: { flexDirection: 'row', gap: 10, marginTop: 2 },
   action: { ...cardStyle, borderRadius: radius.md, paddingVertical: 12, paddingHorizontal: 6, alignItems: 'center', gap: 7 },
   actionPressed: { backgroundColor: colors.surfaceAlt },
   actionIcon: {

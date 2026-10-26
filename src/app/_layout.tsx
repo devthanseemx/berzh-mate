@@ -3,11 +3,12 @@ import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import '../services/location';
 import '../services/meterLocation';
 import { completeAuthFromUrl } from '../services/auth';
+import { isGoogleMapsUrl } from '../services/googleMapsLinks';
 import { ConfirmProvider } from '../components/Confirm';
 import { ToastProvider, useToast } from '../components/Toast';
 import { initSession, useSession } from '../store/session';
@@ -18,7 +19,13 @@ import '../theme/font';
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
 // Sends signed-out users to the sign-in screen, and signed-in users away from it.
-function AuthGate() {
+function AuthGate({
+  incomingMapUrl,
+  onIncomingMapHandled,
+}: {
+  incomingMapUrl: string | null;
+  onIncomingMapHandled: () => void;
+}) {
   const session = useSession((s) => s.session);
   const ready = useSession((s) => s.ready);
   const segments = useSegments();
@@ -28,8 +35,15 @@ function AuthGate() {
     if (!ready) return;
     const onAuthScreen = segments[0] === 'sign-in' || segments[0] === 'sign-up';
     if (!session && !onAuthScreen) router.replace('/sign-in');
-    if (session && onAuthScreen) router.replace('/');
-  }, [ready, session, segments]);
+    if (!session || !incomingMapUrl) {
+      if (session && onAuthScreen) router.replace('/');
+      return;
+    }
+    const destination = { pathname: '/(tabs)/plan' as const, params: { mapsUrl: incomingMapUrl } };
+    if (onAuthScreen) router.replace(destination);
+    else router.push(destination);
+    onIncomingMapHandled();
+  }, [incomingMapUrl, onIncomingMapHandled, ready, session, segments, router]);
 
   return null;
 }
@@ -56,6 +70,7 @@ function WelcomeToast() {
 
 export default function RootLayout() {
   const ready = useSession((s) => s.ready);
+  const [incomingMapUrl, setIncomingMapUrl] = useState<string | null>(null);
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -73,6 +88,10 @@ export default function RootLayout() {
   useEffect(() => {
     const handle = (url: string | null) => {
       if (!url) return;
+      if (isGoogleMapsUrl(url)) {
+        setIncomingMapUrl(url);
+        return;
+      }
       completeAuthFromUrl(url).catch((e) => Alert.alert('Sign-in failed', e.message));
     };
     Linking.getInitialURL().then(handle);
@@ -86,7 +105,7 @@ export default function RootLayout() {
     <ToastProvider>
       <ConfirmProvider>
         <StatusBar style="dark" />
-        <AuthGate />
+        <AuthGate incomingMapUrl={incomingMapUrl} onIncomingMapHandled={() => setIncomingMapUrl(null)} />
         <WelcomeToast />
         <Stack
           screenOptions={{
