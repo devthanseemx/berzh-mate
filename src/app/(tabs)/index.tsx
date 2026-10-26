@@ -18,8 +18,9 @@ import { PENDING_JOIN_KEY } from '../../services/pendingJoin';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { SpendingChart, type ChartPeriod } from '../../components/SpendingChart';
 import { VEHICLE_ICON } from '../../components/vehicleIcons';
-import { useSavedPlaces } from '../../store/savedPlaces';
+import { HOME_PLACE_CATEGORIES, useSavedPlaces } from '../../store/savedPlaces';
 import { HomeSkeleton } from '../../components/HomeSkeleton';
+import { SavedPlacesSheet } from '../../components/SavedPlacesSheet';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -67,7 +68,11 @@ export default function Home() {
   const [period, setPeriod] = useState<ChartPeriod>('week');
   const [offset, setOffset] = useState(0);
   const savedPlaces = useSavedPlaces((s) => s.places);
+  const homePlaces = savedPlaces.filter(
+    (place) => HOME_PLACE_CATEGORIES.some((category) => category === place.category)
+  );
   const [showAllTrips, setShowAllTrips] = useState(false);
+  const [savedPlacesOpen, setSavedPlacesOpen] = useState(false);
 
   // Reloads every time the home screen comes back into view, so new trips appear.
   useFocusEffect(
@@ -184,26 +189,28 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Saved places — one tap plans the route */}
-        {savedPlaces.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.savedStrip}
-          >
-            {savedPlaces.map((p) => (
-              <Pressable
-                key={p.id}
-                onPress={() => router.push({ pathname: '/plan', params: { saved: p.id } })}
-                style={({ pressed }) => [styles.savedChip, pressed && styles.savedChipPressed]}
-              >
-                <Ionicons name="bookmark" size={13} color={colors.accent} />
-                <Text style={styles.savedText} numberOfLines={1}>
-                  {p.name}
+        {/* One entry opens the full categorized saved-place picker. */}
+        {homePlaces.length > 0 && (
+          <View style={styles.savedPlacesSection}>
+            <Text style={styles.section}>Saved places</Text>
+            <Pressable
+              onPress={() => setSavedPlacesOpen(true)}
+              style={({ pressed }) => [styles.savedPlacesButton, pressed && styles.savedChipPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${homePlaces.length} saved places`}
+            >
+              <View style={styles.savedPlacesIcon}>
+                <Ionicons name="bookmark" size={19} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.savedPlacesTitle}>Your places</Text>
+                <Text style={styles.savedPlacesMeta}>
+                  {homePlaces.length} place{homePlaces.length === 1 ? '' : 's'} · Home, office and favorites
                 </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+          </View>
         )}
 
         {/* Quick actions — one tap into each area */}
@@ -370,6 +377,14 @@ export default function Home() {
           </>
         )}
       </ScrollView>
+      <SavedPlacesSheet
+        visible={savedPlacesOpen}
+        onSelect={(place) => {
+          setSavedPlacesOpen(false);
+          router.push({ pathname: '/plan', params: { saved: place.id } });
+        }}
+        onClose={() => setSavedPlacesOpen(false)}
+      />
       <UpdateBanner />
     </SafeAreaView>
   );
@@ -397,20 +412,29 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 16, gap: 12, paddingBottom: 110 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
-  savedStrip: { gap: 8, paddingBottom: 2, paddingRight: 4 },
-  savedChip: {
+  savedPlacesSection: { gap: 8 },
+  savedPlacesButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: 7,
+    borderRadius: radius.md,
+    paddingVertical: 12,
     paddingHorizontal: 12,
+    gap: 11,
   },
+  savedPlacesIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedPlacesTitle: { color: colors.text, fontSize: 14, fontWeight: '700', fontFamily: fonts.bold },
+  savedPlacesMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   savedChipPressed: { backgroundColor: colors.surfaceAlt },
-  savedText: { color: colors.text, fontSize: 13, fontWeight: '600', maxWidth: 150 },
   kicker: { color: colors.accent, letterSpacing: 3, fontSize: 11, fontWeight: '700', fontFamily: fonts.semibold },
   title: { color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 4, marginBottom: 2, letterSpacing: -0.4, fontFamily: fonts.extrabold },
   avatar: { width: 46, height: 46, borderRadius: 23 },

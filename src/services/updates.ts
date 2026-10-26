@@ -19,15 +19,22 @@ function isNewer(latest: string, installed: string): boolean {
 
 // Compares the latest GitHub release tag with the installed version.
 export async function checkForUpdate(): Promise<UpdateInfo> {
-  try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    let res: Response;
+    try {
+      res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
       headers: { Accept: 'application/vnd.github+json' },
     });
-    if (!res.ok) return null;
+    } catch (error: unknown) {
+      throw new Error(error instanceof Error ? error.message : 'Could not connect to the update service.');
+    }
+    if (!res.ok) {
+      throw new Error(`The update service returned status ${res.status}.`);
+    }
 
     const release = await res.json();
     const tag: string = release.tag_name ?? '';
-    if (!tag || !isNewer(tag, current)) return null;
+    if (!tag) throw new Error('The latest release does not include a version tag.');
+    if (!isNewer(tag, current)) return null;
 
     const apk = (release.assets ?? []).find((a: any) => String(a.name).endsWith('.apk'));
     return {
@@ -35,9 +42,6 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
       notes: release.body ?? '',
       url: apk?.browser_download_url ?? release.html_url,
     };
-  } catch {
-    return null; // no internet or GitHub unavailable: stay quiet
-  }
 }
 
 export const installedVersion = current;

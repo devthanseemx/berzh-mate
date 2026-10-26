@@ -10,6 +10,14 @@
     "backgroundColor": "#FFFFFF",
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/splash-transparent.png",
+          "imageWidth": 1
+        }
+      ],
       "@rnmapbox/maps",
       [
         "expo-location",

@@ -172,7 +172,7 @@ export default function Navigate() {
           initialCenter={myStart ?? DEFAULT_CENTER}
           stops={stops}
           route={route}
-          routeMode="navigate"
+          routeMode={navigating ? 'navigate' : 'plan'}
           me={me}
           heading={arrowHeading}
           moves={moves}

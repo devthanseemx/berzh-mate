@@ -13,7 +13,13 @@ export function UpdateBanner() {
 
   useEffect(() => {
     (async () => {
-      const update = await checkForUpdate();
+      let update: UpdateInfo;
+      try {
+        update = await checkForUpdate();
+      } catch (error: unknown) {
+        console.warn('Could not check for app updates:', error);
+        return;
+      }
       if (!update) return;
       const dismissed = await AsyncStorage.getItem(DISMISSED_KEY);
       if (dismissed !== update.version) setInfo(update);

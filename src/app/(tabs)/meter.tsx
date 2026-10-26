@@ -170,7 +170,7 @@ export default function MeterScreen() {
             <Text style={styles.tileLabel}>Time</Text>
           </View>
           <View style={styles.tile}>
-            <Text style={styles.tileValueSmall} numberOfLines={1}>{run.status === 'running' ? 'Running' : run.status === 'done' ? 'Finished' : 'Idle'}</Text>
+            <Text style={styles.tileValueSmall} numberOfLines={1}>{run.status === 'running' ? 'Running' : run.status === 'done' ? 'Finished' : 'Ready'}</Text>
             <Text style={styles.tileLabel}>Status</Text>
           </View>
         </View>

@@ -225,7 +225,15 @@ export default function GroupDetail() {
             confirmLabel: 'End trip',
             danger: true,
         });
-        if (ok) run(() => endGroup(id), undefined, ['Trip ended', 'Live sharing has stopped.']);
+        if (ok)
+            run(
+                async () => {
+                    await endGroup(id);
+                    router.replace('/(tabs)/groups');
+                },
+                undefined,
+                ['Trip ended', 'Live sharing has stopped.']
+            );
     };
 
     const sendEmails = async () => {
@@ -305,7 +313,7 @@ export default function GroupDetail() {
             <ScrollView contentContainerStyle={styles.content}>
                 <Text style={styles.title}>{capitalize(group.name)}</Text>
                 <Text style={[styles.badge, finished ? styles.badgeDone : styles.badgeActive]}>
-                    {finished ? 'Finished' : 'Active'} · {isOwner ? 'You own this trip' : 'Member'}
+                    {finished ? 'Complete' : 'Active'} · {isOwner ? 'You own this trip' : 'Member'}
                 </Text>
 
                 {/* Hero: trip total with the collection summary inside */}

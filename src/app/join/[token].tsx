@@ -64,7 +64,7 @@ export default function JoinTrip() {
               {info.members} {info.members === 1 ? 'person' : 'people'} on this trip
             </Text>
             {info.status === 'finished' ? (
-              <Text style={styles.error}>This trip has finished.</Text>
+              <Text style={styles.error}>This trip is complete.</Text>
             ) : (
               <>
                 <Text style={styles.question}>Join this trip?</Text>

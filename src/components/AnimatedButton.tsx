@@ -60,8 +60,8 @@ export function AnimatedButton({ label, onPress, variant = 'primary', disabled, 
 }
 
 const styles = StyleSheet.create({
-  base: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: radius.md, alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'center' },
-  baseSmall: { paddingVertical: 9, paddingHorizontal: 12, gap: 6 },
+  base: { height: 48, paddingHorizontal: 20, borderRadius: radius.md, alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  baseSmall: { paddingHorizontal: 12, gap: 6 },
   label: { fontWeight: '700', fontSize: 16 },
   labelSmall: { fontSize: 13 },
 });

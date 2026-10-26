@@ -10,9 +10,10 @@ import type { LngLat } from '../types';
 type Props = {
   near: LngLat | null;
   onSelect: (place: PlaceResult) => void;
+  placeholder?: string;
 };
 
-export function SearchBar({ near, onSelect }: Props) {
+export function SearchBar({ near, onSelect, placeholder = 'Search places' }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [busy, setBusy] = useState(false);
@@ -73,7 +74,7 @@ export function SearchBar({ near, onSelect }: Props) {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search places"
+          placeholder={placeholder}
           placeholderTextColor={colors.muted}
           returnKeyType="search"
           style={styles.input}

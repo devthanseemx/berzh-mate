@@ -1,18 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useConfirm } from '../../components/Confirm';
+import { SavedPlacesSheet } from '../../components/SavedPlacesSheet';
 import { useToast } from '../../components/Toast';
 import { signOut } from '../../services/auth';
 import { deleteAccount } from '../../services/profile';
+import { checkForUpdate, installedVersion } from '../../services/updates';
 import { useSavedPlaces } from '../../store/savedPlaces';
 import { useSettings } from '../../store/settings';
 import { cardStyle, colors, radius } from '../../theme/colors';
-
-const APP_VERSION = Constants.expoConfig?.version ?? '1.0';
 
 // Rounded icon tile used by every settings row.
 function IconBox({ name, tone = colors.accent, bg = colors.primarySoft }: { name: keyof typeof Ionicons.glyphMap; tone?: string; bg?: string }) {
@@ -55,6 +55,8 @@ export default function Settings() {
   const setSaveHistory = useSettings((s) => s.setSaveHistory);
   const savedCount = useSavedPlaces((s) => s.places.length);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [savedPlacesOpen, setSavedPlacesOpen] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const confirm = useConfirm();
   const toast = useToast();
 
@@ -88,6 +90,45 @@ export default function Settings() {
     }
   };
 
+  const checkUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const update = await checkForUpdate();
+      if (!update) {
+        Alert.alert('You’re up to date', `Berzh Mate ${installedVersion} is the latest available version.`);
+        return;
+      }
+      Alert.alert(
+        `Update available · v${update.version}`,
+        update.notes || 'A newer version of Berzh Mate is available.',
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Download',
+            onPress: () => {
+              void Linking.openURL(update.url).catch((error: unknown) => {
+                Alert.alert('Could not open download', error instanceof Error ? error.message : 'Try again later.');
+              });
+            },
+          },
+        ]
+      );
+    } catch (error: unknown) {
+      Alert.alert(
+        'Could not check for updates',
+        error instanceof Error ? error.message : 'Check your connection and try again.'
+      );
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const openMapData = () => {
+    void Linking.openURL('https://www.openstreetmap.org/copyright').catch((error: unknown) => {
+      Alert.alert('Could not open map data information', error instanceof Error ? error.message : 'Try again later.');
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -116,21 +157,33 @@ export default function Settings() {
           <View style={styles.divider} />
           <Row icon="speedometer-outline" label="Meter rates" hint="Manage fare profiles for the meter." onPress={() => router.push('/meter/rates')} />
           <View style={styles.divider} />
-          <Row icon="stats-chart-outline" label="Credits & usage" hint="Daily search and route credits." onPress={() => router.push('/usage')} />
-          <View style={styles.divider} />
           <Row
             icon="bookmark-outline"
             label="Saved places"
-            hint={`${savedCount} saved · open the Plan tab to manage them.`}
-            onPress={() => router.push('/plan')}
+            hint={`${savedCount} saved · select one to view it on the map.`}
+            onPress={() => setSavedPlacesOpen(true)}
           />
         </View>
 
         <Text style={styles.section}>About</Text>
         <View style={styles.card}>
-          <Row icon="information-circle-outline" label="Berzh Mate" hint={`Version ${APP_VERSION} · trips, meter and group travel in one app.`} />
+          <Row
+            icon="information-circle-outline"
+            label="Berzh Mate"
+            hint={
+              checkingUpdates
+                ? 'Checking for updates…'
+                : `Version ${installedVersion} · Tap to check for updates.`
+            }
+            onPress={checkingUpdates ? undefined : checkUpdates}
+          />
           <View style={styles.divider} />
-          <Row icon="map-outline" label="Maps & data" hint="Maps © OpenStreetMap · Search by Geoapify · Routing by Geoapify." />
+          <Row
+            icon="map-outline"
+            label="Maps & data"
+            hint="Maps © OpenStreetMap · Search and routing by Geoapify."
+            onPress={openMapData}
+          />
         </View>
 
         <Text style={styles.section}>Session</Text>
@@ -150,6 +203,14 @@ export default function Settings() {
           {!!deleteError && <Text style={styles.error}>{deleteError}</Text>}
         </View>
       </ScrollView>
+      <SavedPlacesSheet
+        visible={savedPlacesOpen}
+        onSelect={(place) => {
+          setSavedPlacesOpen(false);
+          router.push({ pathname: '/plan', params: { saved: place.id } });
+        }}
+        onClose={() => setSavedPlacesOpen(false)}
+      />
     </SafeAreaView>
   );
 }

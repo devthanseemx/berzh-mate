@@ -12,10 +12,17 @@ import { MapStyleSwitcher } from '../../components/MapStyleSwitcher';
 import { OptionSheet } from '../../components/OptionSheet';
 import { SearchBar } from '../../components/SearchBar';
 import { SavedPlacesSheet } from '../../components/SavedPlacesSheet';
+import { SavePlaceSheet } from '../../components/SavePlaceSheet';
 import { DEFAULT_CENTER, TripMap } from '../../components/TripMap';
 import { useToast } from '../../components/Toast';
 import { VehicleIcon } from '../../components/vehicleIcons';
-import { reverseGeocode, VEHICLES, type VehicleKey } from '../../services/geoapify';
+import {
+  fetchAlternatives,
+  reverseGeocode,
+  VEHICLES,
+  type Pref,
+  type VehicleKey,
+} from '../../services/geoapify';
 import type { PlaceResult } from '../../services/mapbox';
 import { getMyLocation } from '../../services/whereAmI';
 import { useMapPrefs } from '../../store/mapPrefs';
@@ -23,8 +30,16 @@ import { useSavedPlaces, type SavedPlace } from '../../store/savedPlaces';
 import { useTripStore, type OptimizeResult } from '../../store/tripStore';
 import { cardStyle, colors, radius, shadow } from '../../theme/colors';
 import { fonts } from '../../theme/font';
-import type { LngLat, Stop } from '../../types';
+import type { LngLat, RouteInfo, RouteOptionItem, Stop } from '../../types';
 import { formatDistance, formatDuration } from '../../utils/format';
+
+type SearchTarget = 'start' | 'destination';
+type PlanningMode = 'distance' | 'multi';
+type SaveTarget = { coord: LngLat; name: string; address?: string };
+
+function samePlace(a: LngLat, b: LngLat): boolean {
+  return Math.abs(a[0] - b[0]) < 1e-5 && Math.abs(a[1] - b[1]) < 1e-5;
+}
 
 function describeOptimize(r: NonNullable<OptimizeResult>): string {
   const saved = r.beforeCost - r.afterCost;
@@ -37,6 +52,9 @@ function describeOptimize(r: NonNullable<OptimizeResult>): string {
 export default function Plan() {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const tapGuard = useRef(0);
+  const distanceRequest = useRef(0);
+  const startedDistanceNavigation = useRef(false);
+  const distanceNavigationActive = useRef(false);
   const addTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const confirm = useConfirm();
@@ -46,9 +64,19 @@ export default function Plan() {
 
   const [me, setMe] = useState<LngLat | null>(null);
   const [candidate, setCandidate] = useState<PlaceResult | null>(null);
+  const [planningMode, setPlanningMode] = useState<PlanningMode>('multi');
+  const [startPlace, setStartPlace] = useState<PlaceResult | null>(null);
+  const [searchTarget, setSearchTarget] = useState<SearchTarget>('destination');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [estimateDestination, setEstimateDestination] = useState<PlaceResult | null>(null);
+  const [distanceRoute, setDistanceRoute] = useState<RouteInfo | null>(null);
+  const [distanceAlternatives, setDistanceAlternatives] = useState<RouteOptionItem[]>([]);
+  const [distanceSelectedId, setDistanceSelectedId] = useState<string | null>(null);
+  const [distanceLoading, setDistanceLoading] = useState(false);
+  const [distanceError, setDistanceError] = useState<string | null>(null);
+  const [saveTarget, setSaveTarget] = useState<SaveTarget | null>(null);
   const [vehOpen, setVehOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
-  const [labelOpen, setLabelOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const styleKey = useMapPrefs((s) => s.styleKey);
@@ -57,6 +85,7 @@ export default function Plan() {
   const alternatives = useTripStore((s) => s.alternatives);
   const selectedAltId = useTripStore((s) => s.selectedAltId);
   const vehicle = useTripStore((s) => s.vehicle);
+  const navigating = useTripStore((s) => s.navigating);
   const loading = useTripStore((s) => s.loading);
   const optimizing = useTripStore((s) => s.optimizing);
   const optimizeResult = useTripStore((s) => s.optimizeResult);
@@ -73,6 +102,10 @@ export default function Plan() {
   const savedPlaces = useSavedPlaces((s) => s.places);
   const savePlace = useSavedPlaces((s) => s.save);
   const removePlace = useSavedPlaces((s) => s.remove);
+  const savedCategories = useMemo(
+    () => [...new Set(savedPlaces.map((place) => place.category).filter((category): category is string => !!category))],
+    [savedPlaces]
+  );
 
   // Reactive check — re-renders the bookmark state the moment a place is saved.
   const coordSaved = (c: LngLat | null) =>
@@ -80,6 +113,21 @@ export default function Plan() {
   const candidateSaved = coordSaved(candidate?.coord ?? null);
 
   const pending = useMemo(() => stops.filter((s) => s.status === 'pending'), [stops]);
+  const distanceStops = useMemo<Stop[]>(() => {
+    const selected: Stop[] = [];
+    if (startPlace?.coord) {
+      selected.push({ id: 'distance-start', name: startPlace.name, coord: startPlace.coord, status: 'pending' });
+    }
+    if (estimateDestination?.coord) {
+      selected.push({
+        id: 'distance-destination',
+        name: estimateDestination.name,
+        coord: estimateDestination.coord,
+        status: 'pending',
+      });
+    }
+    return selected;
+  }, [estimateDestination, startPlace]);
 
   // A longer stop list opens the sheet fully, so everything stays visible.
   useEffect(() => {
@@ -110,25 +158,263 @@ export default function Plan() {
     focus(pos, 16);
   }, [focus]);
 
+  useEffect(() => {
+    if (planningMode !== 'distance') return;
+    const origin = startPlace?.coord ?? me;
+    const destination = estimateDestination?.coord;
+    const requestId = ++distanceRequest.current;
+
+    setDistanceRoute(null);
+    setDistanceAlternatives([]);
+    setDistanceSelectedId(null);
+    setDistanceError(null);
+
+    if (!origin || !destination) {
+      setDistanceLoading(false);
+      return;
+    }
+    if (samePlace(origin, destination)) {
+      setDistanceLoading(false);
+      setDistanceError('Choose two different places to see a route.');
+      return;
+    }
+
+    setDistanceLoading(true);
+    fetchAlternatives([origin, destination], vehicle)
+      .then((found) => {
+        if (distanceRequest.current !== requestId) return;
+        const options: RouteOptionItem[] = found.map(({ id, label, raw }) => ({
+          legs: raw.legs ?? [raw.geometry],
+          steps: raw.steps ?? [],
+          legDistanceM: raw.legDistanceM,
+          legDurationS: raw.legDurationS,
+          distanceM: raw.distanceM,
+          durationS: raw.durationS,
+          id,
+          label,
+        }));
+        setDistanceAlternatives(options);
+        setDistanceRoute(options[0]);
+        setDistanceSelectedId(options[0]?.id ?? null);
+      })
+      .catch((e: unknown) => {
+        if (distanceRequest.current === requestId) {
+          setDistanceError(e instanceof Error ? e.message : 'Could not find a route.');
+        }
+      })
+      .finally(() => {
+        if (distanceRequest.current === requestId) setDistanceLoading(false);
+      });
+
+    return () => {
+      if (distanceRequest.current === requestId) distanceRequest.current += 1;
+    };
+  }, [estimateDestination, me, planningMode, startPlace, vehicle]);
+
+  const chooseDistanceRoute = useCallback((option: RouteOptionItem) => {
+    setDistanceRoute(option);
+    setDistanceSelectedId(option.id);
+  }, []);
+
+  useEffect(() => {
+    if (planningMode !== 'distance' || !distanceRoute) return;
+    const coordinates = distanceRoute.legs.flat();
+    if (coordinates.length < 2) return;
+
+    const bounds = coordinates.reduce(
+      (value, point) => ({
+        north: Math.max(value.north, point[1]),
+        east: Math.max(value.east, point[0]),
+        south: Math.min(value.south, point[1]),
+        west: Math.min(value.west, point[0]),
+      }),
+      { north: -Infinity, east: -Infinity, south: Infinity, west: Infinity }
+    );
+    cameraRef.current?.fitBounds(
+      [bounds.east, bounds.north],
+      [bounds.west, bounds.south],
+      [insets.top + 175, 36, insets.bottom + 205, 36],
+      700
+    );
+  }, [distanceRoute, insets.bottom, insets.top, planningMode]);
+
+  const startDistanceNavigation = useCallback(() => {
+    const destination = estimateDestination;
+    const selectedRoute = distanceRoute;
+    if (!destination?.coord || !selectedRoute || !distanceSelectedId) return;
+
+    const trip = useTripStore.getState();
+    trip.clear();
+    trip.addStop(destination.coord, destination.name);
+    useTripStore.setState({
+      vehicle,
+      route: selectedRoute,
+      alternatives: [],
+      selectedAltId: distanceSelectedId as Pref,
+      error: null,
+    });
+    startedDistanceNavigation.current = true;
+    router.push('/navigate');
+  }, [distanceRoute, distanceSelectedId, estimateDestination, vehicle]);
+
+  const clearDistanceRoute = useCallback(() => {
+    distanceRequest.current += 1;
+    setEstimateDestination(null);
+    setDistanceRoute(null);
+    setDistanceAlternatives([]);
+    setDistanceSelectedId(null);
+    setDistanceError(null);
+    setDistanceLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (startedDistanceNavigation.current && navigating) {
+      startedDistanceNavigation.current = false;
+      distanceNavigationActive.current = true;
+      return;
+    }
+    if (distanceNavigationActive.current && !navigating) {
+      distanceNavigationActive.current = false;
+      clearDistanceRoute();
+    }
+  }, [clearDistanceRoute, navigating]);
+
+  const selectVehicle = useCallback(
+    (nextVehicle: VehicleKey) => {
+      if (planningMode === 'distance') {
+        useTripStore.setState({ vehicle: nextVehicle });
+        return;
+      }
+      void setVehicle(nextVehicle);
+    },
+    [planningMode, setVehicle]
+  );
+
+  const saveCurrentLocation = useCallback(async () => {
+    if (me) {
+      setSaveTarget({ coord: me, name: 'Current location' });
+      void getMyLocation().then((coord) => {
+        if (!coord) return;
+        setMe(coord);
+        setSaveTarget((target) =>
+          target?.name === 'Current location' && samePlace(target.coord, me)
+            ? { ...target, coord }
+            : target
+        );
+      }).catch(() => {
+        toast.info('Using last known location', 'Your saved place will use the most recent location on the map.');
+      });
+      return;
+    }
+    const coord = await getMyLocation();
+    if (!coord) {
+      toast.error('Location unavailable', 'Allow location access and try again.');
+      return;
+    }
+    setMe(coord);
+    setSaveTarget({ coord, name: 'Current location' });
+  }, [me, toast]);
+
+  const selectDistanceEndpoint = useCallback(
+    (place: PlaceResult, target: SearchTarget) => {
+      if (!place.coord) {
+        toast.info('Location unavailable', 'Choose a search result with a map location.');
+        return;
+      }
+      distanceRequest.current += 1;
+      setDistanceRoute(null);
+      setDistanceError(null);
+      if (target === 'start') {
+        setStartPlace(place);
+        setSearchTarget('destination');
+      } else {
+        setEstimateDestination(place);
+      }
+      setSearchOpen(false);
+      if (place.coord) focus(place.coord, 15);
+    },
+    [focus, toast]
+  );
+
+  const selectDistanceMapPoint = useCallback(
+    async (coord: LngLat) => {
+      const target = searchTarget;
+      const name = (await reverseGeocode(coord).catch(() => null)) ?? 'Pinned location';
+      selectDistanceEndpoint(
+        { id: `map-${Date.now()}`, name, address: '', coord },
+        target
+      );
+    },
+    [searchTarget, selectDistanceEndpoint]
+  );
+
+  const setMode = useCallback((mode: PlanningMode) => {
+    if (mode === planningMode) return;
+    setPlanningMode(mode);
+    setSearchOpen(false);
+    setCandidate(null);
+    distanceRequest.current += 1;
+    setSearchTarget('destination');
+    setDistanceRoute(null);
+    setDistanceAlternatives([]);
+    setDistanceSelectedId(null);
+    setDistanceError(null);
+    setDistanceLoading(false);
+    if (mode === 'distance') {
+      setStartPlace(null);
+      setEstimateDestination(null);
+    }
+  }, [planningMode]);
+
   const addPinned = useCallback(
     (coord: LngLat) => {
+      const alreadyAdded = useTripStore.getState().stops.some((stop) => samePlace(stop.coord, coord));
+      if (alreadyAdded) {
+        toast.info('Already added', 'That place is already in your planned stops.');
+        return;
+      }
+      distanceRequest.current += 1;
       const id = addStop(coord, 'Locating…');
+      setEstimateDestination({ id, name: 'Pinned location', address: '', coord });
       reverseGeocode(coord)
-        .then((name) => renameStop(id, name ?? 'Pinned location'))
+        .then((name) => {
+          const placeName = name ?? 'Pinned location';
+          renameStop(id, placeName);
+          setEstimateDestination({ id, name: placeName, address: '', coord });
+        })
         .catch(() => renameStop(id, 'Pinned location'));
     },
-    [addStop, renameStop]
+    [addStop, renameStop, toast]
   );
 
   const onMapPress = useCallback(
     (e: any) => {
       if (Date.now() - tapGuard.current < 500) return;
-      setCandidate(null);
       const coord = e.geometry.coordinates as LngLat;
+      if (planningMode === 'distance') {
+        void selectDistanceMapPoint(coord);
+        return;
+      }
+      if (searchTarget === 'start') {
+        const id = `map-${Date.now()}`;
+        distanceRequest.current += 1;
+        setStartPlace({ id, name: 'Pinned start', address: '', coord });
+        setSearchTarget('destination');
+        setSearchOpen(false);
+        setCandidate(null);
+        focus(coord);
+        reverseGeocode(coord)
+          .then((name) => {
+            if (name) setStartPlace({ id, name, address: '', coord });
+          })
+          .catch(() => toast.info('Start selected', 'The place name could not be found.'));
+        return;
+      }
+      setCandidate(null);
       if (addTimer.current) clearTimeout(addTimer.current);
       addTimer.current = setTimeout(() => addPinned(coord), 250);
     },
-    [addPinned]
+    [addPinned, focus, planningMode, searchTarget, selectDistanceMapPoint, toast]
   );
 
   const onStopPress = useCallback(
@@ -143,33 +429,65 @@ export default function Plan() {
 
   const onSelectPlace = useCallback(
     (place: PlaceResult) => {
+      if (planningMode === 'distance') {
+        selectDistanceEndpoint(place, searchTarget);
+        return;
+      }
+      if (searchTarget === 'start') {
+        setStartPlace(place);
+        setSearchTarget('destination');
+        setSearchOpen(false);
+        if (place.coord) focus(place.coord);
+        return;
+      }
+      const coord = place.coord;
+      if (coord && useTripStore.getState().stops.some((stop) => samePlace(stop.coord, coord))) {
+        setCandidate(null);
+        toast.info('Already added', `${place.name} is already in your planned stops.`);
+        return;
+      }
+      distanceRequest.current += 1;
       setCandidate(place);
-      if (place.coord) focus(place.coord);
+      setEstimateDestination(place);
+      if (coord) focus(coord);
     },
-    [focus]
+    [focus, planningMode, searchTarget, selectDistanceEndpoint, toast]
   );
 
   const confirmCandidate = () => {
-    if (!candidate?.coord) return;
-    addStop(candidate.coord, candidate.name);
+    const coord = candidate?.coord;
+    if (!candidate || !coord) return;
+    if (useTripStore.getState().stops.some((stop) => samePlace(stop.coord, coord))) {
+      setCandidate(null);
+      toast.info('Already added', `${candidate.name} is already in your planned stops.`);
+      return;
+    }
+    addStop(coord, candidate.name);
     setCandidate(null);
   };
 
-  // Saves the shown search result — asks Home / Work / place name first.
+  const cancelCandidate = () => {
+    setCandidate(null);
+    const firstStop = pending[0];
+    setEstimateDestination(
+      firstStop ? { id: firstStop.id, name: firstStop.name, address: '', coord: firstStop.coord } : null
+    );
+  };
+
   const saveCandidate = () => {
     if (!candidate?.coord) return;
     if (coordSaved(candidate.coord)) {
       toast.info('Already saved', 'This place is in your saved places.');
       return;
     }
-    setLabelOpen(true);
+    setSaveTarget({ coord: candidate.coord, name: candidate.name, address: candidate.address });
   };
 
-  const saveWithLabel = (key: string) => {
-    if (!candidate?.coord) return;
-    const name = key === 'home' ? 'Home' : key === 'work' ? 'Work' : candidate.name;
-    savePlace({ name, address: candidate.address ?? '', coord: candidate.coord });
+  const savePlaceWithDetails = (name: string, category: string | null) => {
+    if (!saveTarget) return;
+    savePlace({ name, category, address: saveTarget.address, coord: saveTarget.coord });
     toast.success('Saved', `${name} is in your saved places.`);
+    setSaveTarget(null);
   };
 
   // Bookmark on a pinned stop: tap to save it, tap again to remove it.
@@ -181,16 +499,38 @@ export default function Plan() {
       removePlace(existing.id);
       toast.info('Removed', `${s.name} is no longer saved.`);
     } else {
-      savePlace({ name: s.name, address: '', coord: s.coord });
-      toast.success('Saved', `${s.name} is in your saved places.`);
+      setSaveTarget({ name: s.name, address: '', coord: s.coord });
     }
   };
 
-  // Picking a saved place: drop it on the map, fly to it, and show the route.
+  // Saved places can be selected as either endpoint; destinations also become trip stops.
   const pickSaved = useCallback(
     (place: SavedPlace) => {
       setSavedOpen(false);
+      if (planningMode === 'distance') {
+        selectDistanceEndpoint(
+          { id: place.id, name: place.name, address: place.address, coord: place.coord },
+          searchTarget
+        );
+        return;
+      }
+      if (searchTarget === 'start') {
+        const selected = { id: place.id, name: place.name, address: place.address, coord: place.coord };
+        distanceRequest.current += 1;
+        setStartPlace(selected);
+        setSearchTarget('destination');
+        setCandidate(null);
+        focus(place.coord, 15);
+        return;
+      }
+      if (useTripStore.getState().stops.some((stop) => samePlace(stop.coord, place.coord))) {
+        setCandidate(null);
+        toast.info('Already added', `${place.name} is already in your planned stops.`);
+        return;
+      }
+      distanceRequest.current += 1;
       setCandidate(null);
+      setEstimateDestination({ id: place.id, name: place.name, address: place.address, coord: place.coord });
       addStop(place.coord, place.name);
       focus(place.coord, 15);
       // Build the route right away, so tapping a place shows directions.
@@ -203,7 +543,7 @@ export default function Plan() {
         else toast.info('Stop added', st.error ?? `${place.name} was added to your stops.`);
       }, 350);
     },
-    [addStop, focus, previewRoute, toast]
+    [addStop, focus, planningMode, previewRoute, searchTarget, selectDistanceEndpoint, toast]
   );
 
   // A saved place id handed over from the Home strip adds itself on open.
@@ -223,8 +563,32 @@ export default function Plan() {
       confirmLabel: 'Delete',
       danger: true,
     });
-    if (ok) clear();
+    if (ok) {
+      clear();
+      setEstimateDestination(null);
+      setCandidate(null);
+    }
   };
+
+  const handleAlternativePress = useCallback(
+    (id: string) => {
+      if (planningMode === 'distance') {
+        const option = distanceAlternatives.find((item) => item.id === id);
+        if (option) chooseDistanceRoute(option);
+        return;
+      }
+      selectAlternative(id);
+    },
+    [chooseDistanceRoute, distanceAlternatives, planningMode, selectAlternative]
+  );
+  const fastestRouteId = distanceAlternatives.reduce<RouteOptionItem | null>(
+    (best, option) => (!best || option.durationS < best.durationS ? option : best),
+    null
+  )?.id;
+  const shortestRouteId = distanceAlternatives.reduce<RouteOptionItem | null>(
+    (best, option) => (!best || option.distanceM < best.distanceM ? option : best),
+    null
+  )?.id;
 
   return (
     <View style={styles.root}>
@@ -232,27 +596,121 @@ export default function Plan() {
         cameraRef={cameraRef}
         styleKey={styleKey}
         initialCenter={DEFAULT_CENTER}
-        stops={stops}
+        stops={planningMode === 'multi' ? stops : distanceStops}
         moves={moves}
-        route={route}
+        route={planningMode === 'multi' ? route : distanceRoute}
         routeMode="plan"
         me={me}
-        candidate={candidate?.coord ?? null}
+        candidate={planningMode === 'multi' ? candidate?.coord ?? null : null}
         showNames
-        alternatives={alternatives}
-        selectedAltId={selectedAltId}
-        onAlternativePress={selectAlternative}
+        alternatives={planningMode === 'multi' ? alternatives : distanceAlternatives}
+        selectedAltId={planningMode === 'multi' ? selectedAltId : distanceSelectedId}
+        onAlternativePress={handleAlternativePress}
         onPress={onMapPress}
-        onStopPress={onStopPress}
+        onStopPress={planningMode === 'multi' ? onStopPress : undefined}
       />
 
-      {/* Top: search only — everything else moved to the right control column */}
       <View style={[styles.top, { top: insets.top + 6 }]}>
-        <SearchBar near={me} onSelect={onSelectPlace} />
+        <View style={styles.modeSwitch}>
+          <Pressable
+            onPress={() => setMode('distance')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: planningMode === 'distance' }}
+            style={[styles.modeOption, planningMode === 'distance' && styles.modeOptionSelected]}
+          >
+            <Ionicons name="swap-horizontal-outline" size={15} color={planningMode === 'distance' ? colors.onPrimary : colors.muted} />
+            <Text style={[styles.modeText, planningMode === 'distance' && styles.modeTextSelected]}>Two places</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMode('multi')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: planningMode === 'multi' }}
+            style={[styles.modeOption, planningMode === 'multi' && styles.modeOptionSelected]}
+          >
+            <Ionicons name="git-branch-outline" size={15} color={planningMode === 'multi' ? colors.onPrimary : colors.muted} />
+            <Text style={[styles.modeText, planningMode === 'multi' && styles.modeTextSelected]}>Multi-stop route</Text>
+          </Pressable>
+        </View>
+
+        {planningMode === 'distance' ? (
+          <>
+            <View style={styles.endpointStack}>
+              {searchOpen && searchTarget === 'start' ? (
+                <View style={styles.endpointSearch}>
+                  <Text style={styles.endpointLabel}>FROM</Text>
+                  <SearchBar near={me} onSelect={onSelectPlace} placeholder="Search starting place" />
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setSearchTarget('start');
+                    setSearchOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose starting place"
+                  style={styles.endpointField}
+                >
+                  <Ionicons name="radio-button-on" size={17} color={colors.accent} />
+                  <View style={styles.endpointCopy}>
+                    <Text style={styles.endpointLabel}>FROM</Text>
+                    <Text style={styles.endpointValue} numberOfLines={1}>{startPlace?.name ?? 'My location'}</Text>
+                  </View>
+                  <Ionicons name="search-outline" size={16} color={colors.muted} />
+                </Pressable>
+              )}
+              <View style={styles.endpointDivider}>
+                <View style={styles.dividerLine} />
+                <Ionicons name="arrow-down" size={15} color={colors.muted} />
+                <View style={styles.dividerLine} />
+              </View>
+              {searchOpen && searchTarget === 'destination' ? (
+                <View style={styles.endpointSearch}>
+                  <Text style={styles.endpointLabel}>TO</Text>
+                  <SearchBar near={me} onSelect={onSelectPlace} placeholder="Search destination" />
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setSearchTarget('destination');
+                    setSearchOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose destination"
+                  style={styles.endpointField}
+                >
+                  <Ionicons name="location" size={17} color={colors.primaryStrong} />
+                  <View style={styles.endpointCopy}>
+                    <Text style={styles.endpointLabel}>TO</Text>
+                    <Text style={styles.endpointValue} numberOfLines={1}>
+                      {estimateDestination?.name ?? 'Choose destination'}
+                    </Text>
+                  </View>
+                  <Ionicons name="search-outline" size={16} color={colors.muted} />
+                </Pressable>
+              )}
+            </View>
+            {startPlace && (
+              <Pressable
+                onPress={() => {
+                  setStartPlace(null);
+                  setSearchTarget('destination');
+                  setSearchOpen(false);
+                }}
+                style={styles.useMyLocation}
+              >
+                <Ionicons name="locate-outline" size={13} color={colors.accent} />
+                <Text style={styles.useMyLocationText}>Use my location as start</Text>
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <View style={styles.searchPanel}>
+            <SearchBar near={me} onSelect={onSelectPlace} placeholder="Search and add a place to your route" />
+          </View>
+        )}
       </View>
 
-      {/* Right column: map style, saved places, vehicle type, locate me */}
-      <View style={[styles.side, { top: insets.top + 62 }]}>
+      {!searchOpen && <View style={[styles.side, { top: insets.top + (planningMode === 'distance' ? 202 : 176) }]}>
         <MapStyleSwitcher />
         <Pressable
           accessibilityLabel="Saved places"
@@ -260,18 +718,17 @@ export default function Plan() {
           style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
         >
           <Ionicons name="bookmark-outline" size={20} color={colors.primaryStrong} />
-          {savedPlaces.length > 0 && <View style={styles.sideDot} />}
         </Pressable>
         <Pressable
           accessibilityLabel="Vehicle type"
           onPress={() => setVehOpen(true)}
           style={({ pressed }) => [styles.sideBtn, pressed && styles.sideBtnPressed]}
         >
-          <Ionicons name="car-sport-outline" size={20} color={colors.primaryStrong} />
+          <VehicleIcon name={vehicle} size={20} color={colors.primaryStrong} />
           {vehicle !== 'car' && <View style={styles.sideDot} />}
         </Pressable>
         <LocateButton onPress={recenter} />
-      </View>
+      </View>}
 
       <OptionSheet
         visible={vehOpen}
@@ -283,35 +740,104 @@ export default function Plan() {
           note: VEHICLES[k].note || undefined,
           icon: <VehicleIcon name={k} color={colors.primaryStrong} />,
         }))}
-        onSelect={setVehicle}
+        onSelect={selectVehicle}
         onClose={() => setVehOpen(false)}
       />
 
-      <SavedPlacesSheet visible={savedOpen} onSelect={pickSaved} onClose={() => setSavedOpen(false)} />
-
-      <OptionSheet
-        visible={labelOpen}
-        title="Save place as"
-        value=""
-        options={[
-          { key: 'home', label: 'Home', icon: <Ionicons name="home-outline" size={17} color={colors.primaryStrong} /> },
-          { key: 'work', label: 'Work', icon: <Ionicons name="briefcase-outline" size={17} color={colors.primaryStrong} /> },
-          { key: 'place', label: candidate?.name ?? 'This place', icon: <Ionicons name="location-outline" size={17} color={colors.primaryStrong} /> },
-        ]}
-        onSelect={saveWithLabel}
-        onClose={() => setLabelOpen(false)}
+      <SavedPlacesSheet
+        visible={savedOpen}
+        onSelect={pickSaved}
+        onSaveCurrentLocation={() => {
+          setSavedOpen(false);
+          void saveCurrentLocation();
+        }}
+        onClose={() => setSavedOpen(false)}
       />
 
-      <MotiView
-        from={{ opacity: 0, translateY: 40, scale: 0.98 }}
-        animate={{ opacity: 1, translateY: 0, scale: 1 }}
-        transition={{ type: 'timing', duration: 220 }}
-        style={[styles.sheet, { bottom: insets.bottom + 12, maxHeight: expanded ? '78%' : 340 }]}
-      >
+      <SavePlaceSheet
+        visible={!!saveTarget}
+        initialName={saveTarget?.name ?? ''}
+        categories={savedCategories}
+        onSave={savePlaceWithDetails}
+        onClose={() => setSaveTarget(null)}
+      />
+
+      {planningMode === 'distance' && estimateDestination?.coord ? (
+        <View style={[styles.sheet, styles.distanceSheet, { bottom: insets.bottom + 12 }]}>
+          <View style={styles.distanceHead}>
+            <Text style={styles.title}>{distanceRoute ? 'Route options' : 'Planning route'}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear selected route"
+              hitSlop={10}
+              onPress={clearDistanceRoute}
+              style={styles.clearRouteButton}
+            >
+              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+            </Pressable>
+          </View>
+          {estimateDestination?.coord && !startPlace && !me && (
+            <Text style={styles.hint}>Waiting for your current location. Choose a start place instead.</Text>
+          )}
+          {distanceLoading && <Text style={styles.hint}>Finding fastest and shortest routes…</Text>}
+          {!!distanceError && <Text style={styles.error}>{distanceError}</Text>}
+          {distanceAlternatives.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.cardScroll}
+              contentContainerStyle={styles.distanceCardRow}
+            >
+              {distanceAlternatives.map((option) => {
+                const selected = option.id === distanceSelectedId;
+                const isFastest = option.id === fastestRouteId;
+                const isShortest = option.id === shortestRouteId;
+                const label = isFastest && isShortest
+                  ? 'Fastest · Shortest'
+                  : isFastest
+                    ? 'Fastest'
+                    : isShortest
+                      ? 'Shortest'
+                      : option.label;
+                return (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => chooseDistanceRoute(option)}
+                    style={[styles.card, selected && styles.cardOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={styles.cardTitle}>{label}</Text>
+                    <Text style={styles.cardMeta}>{formatDistance(option.distanceM)}</Text>
+                    <Text style={styles.cardDetail}>{formatDuration(option.durationS)}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+          {distanceRoute && (
+            <View style={styles.distanceActions}>
+              <AnimatedButton
+                label="Start navigation"
+                onPress={startDistanceNavigation}
+                icon={<Ionicons name="navigate-outline" size={17} color={colors.onPrimary} />}
+                style={{ flex: 1 }}
+              />
+            </View>
+          )}
+        </View>
+      ) : (candidate || pending.length > 0) && (
+        <MotiView
+          from={{ opacity: 0, translateY: 40, scale: 0.98 }}
+          animate={{ opacity: 1, translateY: 0, scale: 1 }}
+          transition={{ type: 'timing', duration: 220 }}
+          style={[styles.sheet, { bottom: insets.bottom + 12, maxHeight: expanded ? '78%' : 340 }]}
+        >
         {candidate ? (
           <>
             <Text style={styles.title}>{candidate.name}</Text>
-            {!!candidate.address && <Text style={styles.hint}>{candidate.address}</Text>}              <AnimatedButton label="Add to route" onPress={confirmCandidate} style={{ marginTop: 14 }} />
+            {!!candidate.address && <Text style={styles.hint}>{candidate.address}</Text>}
+            <AnimatedButton label="Add to route" onPress={confirmCandidate} style={{ marginTop: 14 }} />
             <View style={styles.row}>
               <AnimatedButton
                 label={candidateSaved ? 'Saved' : 'Save'}
@@ -330,7 +856,7 @@ export default function Plan() {
               <AnimatedButton
                 label="Cancel"
                 variant="ghost"
-                onPress={() => setCandidate(null)}
+                onPress={cancelCandidate}
                 small
                 style={{ flex: 1 }}
               />
@@ -466,7 +992,8 @@ export default function Plan() {
             )}
           </>
         )}
-      </MotiView>
+        </MotiView>
+      )}
     </View>
   );
 }
@@ -474,6 +1001,67 @@ export default function Plan() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   top: { position: 'absolute', left: 12, right: 12 },
+  modeSwitch: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 7,
+    padding: 4,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.float,
+  },
+  modeOption: {
+    flex: 1,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+  },
+  modeOptionSelected: { backgroundColor: colors.primaryStrong },
+  modeText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  modeTextSelected: { color: colors.onPrimary },
+  endpointStack: {
+    gap: 4,
+    padding: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.float,
+  },
+  endpointField: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceAlt,
+  },
+  endpointSearch: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceAlt,
+  },
+  endpointDivider: { height: 14, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
+  dividerLine: { height: 1, flex: 1, backgroundColor: colors.border },
+  searchPanel: {
+    padding: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.float,
+  },
+  endpointCopy: { flex: 1, minWidth: 0 },
+  endpointLabel: { fontSize: 9, color: colors.muted, fontWeight: '800', letterSpacing: 0.8 },
+  endpointValue: { color: colors.text, fontSize: 12, fontWeight: '700', marginTop: 1 },
+  useMyLocation: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, marginBottom: 5, paddingHorizontal: 4 },
+  useMyLocationText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
   side: { position: 'absolute', right: 12, gap: 10, alignItems: 'center' },
   sideBtn: {
     width: 44,
@@ -499,6 +1087,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadow.float,
   },
+  distanceSheet: { padding: 16 },
+  distanceHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  clearRouteButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  distanceActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   grabber: { alignItems: 'center', paddingBottom: 8 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border },
   grabRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
@@ -524,6 +1123,7 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, marginTop: 6 },
   cardScroll: { flexGrow: 0, marginTop: 12 },
   cardRow: { gap: 8 },
+  distanceCardRow: { flexGrow: 1, justifyContent: 'center', gap: 8 },
   card: {
     padding: 12,
     minWidth: 150,
@@ -533,6 +1133,7 @@ const styles = StyleSheet.create({
   cardOn: { borderColor: colors.primaryStrong },
   cardTitle: { color: colors.text, fontWeight: '700' },
   cardMeta: { color: colors.accent, marginTop: 4, fontWeight: '600' },
+  cardDetail: { color: colors.muted, marginTop: 3, fontSize: 12, fontWeight: '600' },
   list: { marginTop: 10 },
   listRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5 },
   savedBtn: { flex: 1, borderColor: colors.primaryStrong, backgroundColor: colors.primarySoft },

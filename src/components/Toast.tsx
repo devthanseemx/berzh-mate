@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadow } from '../theme/colors';
 import { fonts } from '../theme/font';
 
-// Custom in-app toast. Slides in from the top-right, auto-dismisses, one at a time.
+// Custom in-app toast. Slides up from the bottom, auto-dismisses, one at a time.
 // A short headline ("Done", "Saved", "Copied"…) plus an optional detail line.
 // Usage: const toast = useToast(); toast.success('Saved', 'Rate saved.'); toast.error('Oops', '...');
 
@@ -14,10 +14,10 @@ type ToastKind = 'success' | 'error' | 'info';
 
 type ToastMsg = { kind: ToastKind; title: string; message?: string; id: number };
 
-const TONE: Record<ToastKind, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
-  success: { icon: 'checkmark-circle', color: colors.success },
-  error: { icon: 'alert-circle', color: colors.danger },
-  info: { icon: 'information-circle', color: colors.primaryStrong },
+const TONE: Record<ToastKind, { icon: keyof typeof Ionicons.glyphMap; color: string; background: string }> = {
+  success: { icon: 'checkmark-circle', color: colors.success, background: '#ECFDF5' },
+  error: { icon: 'alert-circle', color: colors.danger, background: '#FFF1F2' },
+  info: { icon: 'information-circle', color: colors.primaryStrong, background: '#FFFBEB' },
 };
 
 type ToastApi = {
@@ -66,17 +66,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {!!msg && tone && (
         <MotiView
           key={msg.id}
-          from={{ opacity: 0, translateX: 40 }}
-          animate={{ opacity: 1, translateX: 0 }}
-          exit={{ opacity: 0, translateX: 40 }}
+          from={{ opacity: 0, translateY: 24, scale: 0.98 }}
+          animate={{ opacity: 1, translateY: 0, scale: 1 }}
+          exit={{ opacity: 0, translateY: 16 }}
           transition={{ type: 'timing', duration: 220 }}
-          style={[styles.wrap, { top: insets.top + 8 }]}
+          style={[styles.wrap, { bottom: insets.bottom + 72 }]}
         >
-          <Pressable style={styles.card} onPress={() => setMsg(null)}>
-            <Ionicons name={tone.icon} size={20} color={tone.color} />
-            {/* flexShrink (not flex:1): the card is auto-width, and flex:1
-                collapses the measured text width to zero on Android. */}
-            <View style={{ flexShrink: 1 }}>
+          <Pressable
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+            onPress={() => setMsg(null)}
+            accessibilityRole="button"
+            accessibilityLabel={[msg.title, msg.message].filter(Boolean).join('. ')}
+          >
+            <View style={[styles.iconWrap, { backgroundColor: tone.background }]}>
+              <Ionicons name={tone.icon} size={21} color={tone.color} />
+            </View>
+            <View style={styles.textWrap}>
               <Text style={styles.title} numberOfLines={1}>
                 {msg.title}
               </Text>
@@ -94,21 +99,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  // Top-right, compact — never covers the map or the screen centre.
-  wrap: { position: 'absolute', right: 12, maxWidth: 320, zIndex: 100 },
+  wrap: { position: 'absolute', left: 16, right: 16, maxWidth: 440, alignSelf: 'center', zIndex: 100 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    borderLeftWidth: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 13,
-    ...shadow.soft,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    ...shadow.float,
   },
+  cardPressed: { opacity: 0.92 },
+  iconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  textWrap: { flex: 1, flexShrink: 1 },
   title: { color: colors.text, fontWeight: '800', fontSize: 13, fontFamily: fonts.bold },
   message: { color: colors.muted, fontSize: 12, marginTop: 1 },
 });

@@ -164,7 +164,7 @@ export default function Groups() {
                 <View style={[styles.badge, active ? styles.badgeActive : styles.badgeDone]}>
                   <View style={[styles.badgeDot, { backgroundColor: active ? colors.success : colors.muted }]} />
                   <Text style={[styles.badgeText, { color: active ? '#065F46' : colors.muted }]}>
-                    {active ? 'Active' : 'Finished'}
+                    {active ? 'Active' : 'Complete'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.muted} />

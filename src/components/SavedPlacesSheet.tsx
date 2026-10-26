@@ -12,14 +12,28 @@ export function SavedPlacesSheet({
   visible,
   onSelect,
   onClose,
+  onSaveCurrentLocation,
 }: {
   visible: boolean;
   onSelect: (place: SavedPlace) => void;
   onClose: () => void;
+  onSaveCurrentLocation?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const places = useSavedPlaces((s) => s.places);
   const remove = useSavedPlaces((s) => s.remove);
+  const groups = places.reduce<Record<string, SavedPlace[]>>((byCategory, place) => {
+    const category = place.category || 'Other places';
+    (byCategory[category] ??= []).push(place);
+    return byCategory;
+  }, {});
+  const categoryOrder = [
+    'Home',
+    'Office',
+    'Places to visit',
+    ...Object.keys(groups).filter((category) => !['Home', 'Office', 'Places to visit', 'Other places'].includes(category)).sort(),
+    'Other places',
+  ].filter((category) => groups[category]?.length);
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -38,43 +52,57 @@ export function SavedPlacesSheet({
               <Text style={styles.title}>Saved places</Text>
               <Text style={styles.count}>{places.length}</Text>
             </View>
+            {onSaveCurrentLocation && (
+              <Pressable onPress={onSaveCurrentLocation} style={styles.saveLocation}>
+                <Ionicons name="locate-outline" size={16} color={colors.primaryStrong} />
+                <Text style={styles.saveLocationText}>Save current location</Text>
+              </Pressable>
+            )}
 
             {places.length === 0 ? (
               <View style={styles.empty}>
                 <Ionicons name="bookmark-outline" size={24} color={colors.muted} />
                 <Text style={styles.emptyText}>
-                  No saved places yet. Search a place and tap “Save”, or save a pinned
-                  location from the stop list.
+                  No saved places yet. Save a searched place, a map pin, or your current
+                  location, then give it a name and category.
                 </Text>
               </View>
             ) : (
               <ScrollView style={styles.list} nestedScrollEnabled>
-                {places.map((p) => (
-                  <View key={p.id} style={styles.row}>
-                    <Pressable onPress={() => onSelect(p)} style={styles.rowMain}>
-                      <View style={styles.pin}>
-                        <Ionicons name="location" size={15} color={colors.accent} />
+                {categoryOrder.map((category) => (
+                  <View key={category}>
+                    <View style={styles.categoryHead}>
+                      <Text style={styles.categoryTitle}>{category}</Text>
+                      <Text style={styles.categoryCount}>{groups[category].length}</Text>
+                    </View>
+                    {groups[category].map((p) => (
+                      <View key={p.id} style={styles.row}>
+                        <Pressable onPress={() => onSelect(p)} style={styles.rowMain}>
+                          <View style={styles.pin}>
+                            <Ionicons name="location" size={15} color={colors.accent} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.label} numberOfLines={1}>
+                              {p.name}
+                            </Text>
+                            {!!p.address && (
+                              <Text style={styles.note} numberOfLines={1}>
+                                {p.address}
+                              </Text>
+                            )}
+                          </View>
+                          <Ionicons name="navigate" size={17} color={colors.primaryStrong} />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => remove(p.id)}
+                          hitSlop={8}
+                          style={styles.trash}
+                          accessibilityLabel={`Remove ${p.name}`}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                        </Pressable>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.label} numberOfLines={1}>
-                          {p.name}
-                        </Text>
-                        {!!p.address && (
-                          <Text style={styles.note} numberOfLines={1}>
-                            {p.address}
-                          </Text>
-                        )}
-                      </View>
-                      <Ionicons name="navigate" size={17} color={colors.primaryStrong} />
-                    </Pressable>
-                    <Pressable
-                      onPress={() => remove(p.id)}
-                      hitSlop={8}
-                      style={styles.trash}
-                      accessibilityLabel={`Remove ${p.name}`}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                    </Pressable>
+                    ))}
                   </View>
                 ))}
               </ScrollView>
@@ -118,14 +146,26 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
   },
+  saveLocation: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 6,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  saveLocationText: { color: colors.primaryStrong, fontSize: 13, fontWeight: '700' },
   empty: { alignItems: 'center', gap: 8, paddingVertical: 22 },
   emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   list: { flexGrow: 0 },
+  categoryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingBottom: 5, borderTopWidth: 1, borderColor: colors.border },
+  categoryTitle: { color: colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  categoryCount: { color: colors.muted, fontSize: 11, fontWeight: '700' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderColor: colors.border,
   },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
   pin: {
