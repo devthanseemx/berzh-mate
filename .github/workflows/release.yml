@@ -93,8 +93,12 @@ jobs:
           # Mapbox Android SDK download token, read by Gradle
           mkdir -p ~/.gradle
           echo "MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN" >> ~/.gradle/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" >> ~/.gradle/gradle.properties
 
           chmod +x android/gradlew
+
+      - name: Clear stale Android lint caches
+        run: find node_modules -type d -path '*/build/intermediates/lint-cache' -prune -exec rm -rf {} +
 
       - name: Build release APK
         env:
