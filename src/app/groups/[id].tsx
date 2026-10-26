@@ -126,7 +126,7 @@ export default function GroupDetail() {
         }, [load])
     );
 
-    const members = data?.members ?? [];
+    const members = useMemo(() => data?.members ?? [], [data?.members]);
     const group = data?.group;
     const finished = group?.status === 'finished';
     const isOwner = !!group && group.owner_id === me;
@@ -147,7 +147,7 @@ export default function GroupDetail() {
         setIncluded((inc) =>
             inc.length ? inc.filter((x) => members.some((m) => m.id === x)) : members.map((m) => m.id)
         );
-    }, [data]);
+    }, [data, members, myMember?.id]);
 
     const summary = useMemo(() => {
         if (!data) return null;

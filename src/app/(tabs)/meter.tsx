@@ -53,7 +53,7 @@ export default function MeterScreen() {
   // If the app was closed during a trip, resume tracking.
   useEffect(() => {
     if (run.status === 'running') startMeterTracking().catch(() => {});
-  }, []);
+  }, [run.status]);
 
   // Keep the summary briefly, but preserve the completed trip in History.
   useEffect(() => {

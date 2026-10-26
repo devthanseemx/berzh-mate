@@ -102,7 +102,7 @@ export default function Navigate() {
       stopTracking();
       stopNavigation();
     };
-  }, []);
+  }, [startNavigation, stopNavigation]);
 
   // Stop GPS once the whole trip is complete.
   useEffect(() => {

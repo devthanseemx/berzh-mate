@@ -29,7 +29,7 @@ function PulseDot({ color }: { color: string }) {
   const s = useSharedValue(1);
   useEffect(() => {
     s.value = withRepeat(withTiming(2.2, { duration: 1400 }), -1, false);
-  }, []);
+  }, [s]);
   const ring = useAnimatedStyle(() => ({
     transform: [{ scale: s.value }],
     opacity: 1.6 - s.value * 0.7,
@@ -51,7 +51,6 @@ export default function LiveGroup() {
   const fitted = useRef(false);
 
   const [members, setMembers] = useState<Member[]>([]);
-  const [me, setMe] = useState<string | null>(null);
   const [myMemberId, setMyMemberId] = useState<string | null>(null);
   const [locs, setLocs] = useState<Record<string, Loc>>({});
   const [sharing, setSharingState] = useState(false);
@@ -64,7 +63,6 @@ export default function LiveGroup() {
 
     (async () => {
       const uid = await currentUserId();
-      setMe(uid);
       const { group, members: ms } = await getGroup(id);
       setMembers(ms.map((m) => ({ id: m.id, name: m.name || m.email, user_id: m.user_id })));
       const mine = ms.find((m) => m.user_id === uid);

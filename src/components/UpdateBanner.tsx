@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { checkForUpdate, installedVersion, type UpdateInfo } from '../services/updates';
-import { colors, radius } from '../theme/colors';
+import { colors, radius, shadow } from '../theme/colors';
 import { AnimatedButton } from './AnimatedButton';
 import { UpdatePrompt } from './UpdatePrompt';
 
@@ -37,16 +38,26 @@ export function UpdateBanner() {
     <>
       {info && (
         <View style={styles.card}>
-          <Text style={styles.title}>Update available: v{info.version}</Text>
-          <Text style={styles.sub}>You have v{installedVersion}. Download the new version to get the latest changes.</Text>
+          <View style={styles.heading}>
+            <View style={styles.icon}>
+              <Ionicons name="arrow-down-circle-outline" size={20} color={colors.primaryStrong} />
+            </View>
+            <View style={styles.headingText}>
+              <Text style={styles.title}>Update available</Text>
+              <Text style={styles.version}>Berzh Mate v{info.version}</Text>
+            </View>
+          </View>
+          <Text style={styles.sub}>
+            You have v{installedVersion}. Install the latest version to get the newest improvements.
+          </Text>
           {!!info.notes && (
             <Text style={styles.notes} numberOfLines={4}>
               {info.notes}
             </Text>
           )}
           <View style={styles.row}>
-            <AnimatedButton label="Download" onPress={() => setPromptOpen(true)} style={{ flex: 1 }} />
-            <AnimatedButton label="Later" variant="ghost" onPress={later} style={{ flex: 1 }} />
+            <AnimatedButton small label="Update now" onPress={() => setPromptOpen(true)} style={{ flex: 1 }} />
+            <AnimatedButton small label="Later" variant="ghost" onPress={later} style={{ flex: 1 }} />
           </View>
         </View>
       )}
@@ -57,15 +68,27 @@ export function UpdateBanner() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.primary,
-    gap: 6,
+    borderColor: colors.border,
+    gap: 8,
+    ...shadow.float,
   },
-  title: { color: colors.accent, fontWeight: '800', fontSize: 16 },
-  sub: { color: '#92400E', fontSize: 12 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  icon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  headingText: { flex: 1, gap: 2 },
+  title: { color: colors.text, fontWeight: '800', fontSize: 16 },
+  version: { color: colors.primaryStrong, fontWeight: '700', fontSize: 12 },
+  sub: { color: colors.muted, fontSize: 12, lineHeight: 17 },
   notes: { color: colors.text, fontSize: 12, marginTop: 4 },
   row: { flexDirection: 'row', gap: 10, marginTop: 8 },
 });

@@ -109,32 +109,42 @@ export default function Rates() {
           const active = r.id === activeRateId;
           return (
             <View key={r.id} style={[styles.card, active && styles.cardActive]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => setActiveRateId(r.id)}
-                style={{ flex: 1 }}
-              >
-                <View style={styles.rateTitleRow}>
-                  <Text style={styles.name}>{r.name}</Text>
-                  {active && (
-                    <View style={styles.activeBadge}>
-                      <Ionicons name="checkmark-circle" size={15} color={colors.primaryStrong} />
-                      <Text style={styles.activeText}>SELECTED</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.meta}>
-                  {money(r.price_per_km)} per km
-                  {r.base_fare > 0 ? ` · base ${money(r.base_fare)}` : ''}
-                </Text>
-              </Pressable>
+              <View style={styles.rateMainRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setActiveRateId(r.id)}
+                  style={styles.rateDetails}
+                >
+                  <Text style={styles.name} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.meta}>
+                    {money(r.price_per_km)} per km
+                    {r.base_fare > 0 ? ` · base ${money(r.base_fare)}` : ''}
+                  </Text>
+                </Pressable>
+                {active && (
+                  <View style={styles.activeBadge}>
+                    <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+                    <Text style={styles.activeText}>SELECTED</Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.actions}>
-                <Pressable onPress={() => setForm({ id: r.id, name: r.name, price: String(r.price_per_km), base: String(r.base_fare) })}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setForm({ id: r.id, name: r.name, price: String(r.price_per_km), base: String(r.base_fare) })}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.actionPressed]}
+                >
+                  <Ionicons name="create-outline" size={16} color={colors.primaryStrong} />
                   <Text style={styles.link}>Edit</Text>
                 </Pressable>
-                <Pressable onPress={() => remove(r)}>
-                  <Text style={[styles.link, { color: colors.danger }]}>Delete</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => remove(r)}
+                  style={({ pressed }) => [styles.actionButton, styles.deleteAction, pressed && styles.actionPressed]}
+                >
+                  <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                  <Text style={[styles.link, styles.deleteText]}>Delete</Text>
                 </Pressable>
               </View>
             </View>
@@ -178,20 +188,24 @@ const styles = StyleSheet.create({
   addButtonDisabled: { opacity: 0.45 },
   hint: { color: colors.muted },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 14,
     borderRadius: radius.md,
+    gap: 12,
     ...cardStyle,
   },
-  cardActive: { borderColor: colors.primaryStrong, backgroundColor: colors.primarySoft },
-  rateTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  activeText: { color: colors.primaryStrong, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  name: { color: colors.text, fontWeight: '700', fontSize: 16 },
+  cardActive: { borderColor: '#86EFAC', backgroundColor: '#F0FDF4' },
+  rateMainRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rateDetails: { flex: 1, minWidth: 0 },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, backgroundColor: '#DCFCE7' },
+  activeText: { color: colors.success, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  name: { color: colors.text, fontWeight: '700', fontSize: 16, flexShrink: 1 },
   meta: { color: colors.muted, marginTop: 4 },
-  actions: { gap: 10, marginLeft: 12 },
-  link: { color: colors.accent, fontWeight: '600' },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 10 },
+  actionButton: { minWidth: 88, minHeight: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  deleteAction: { backgroundColor: '#FFF1F2' },
+  actionPressed: { opacity: 0.75 },
+  link: { color: colors.primaryStrong, fontWeight: '700', fontSize: 13 },
+  deleteText: { color: colors.danger },
   form: {
     marginTop: 12,
     padding: 18,

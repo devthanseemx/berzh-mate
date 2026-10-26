@@ -31,6 +31,7 @@ type Props = {
   stops: Stop[];
   route: RouteInfo | null;
   routeMode: 'plan' | 'navigate';
+  showMeArrow?: boolean;
   me: LngLat | null;
   heading?: number;
   reroutes?: LngLat[][];
@@ -58,6 +59,7 @@ function TripMapBase({
   stops,
   route,
   routeMode,
+  showMeArrow,
   me,
   heading = -1,
   reroutes = [],
@@ -73,6 +75,7 @@ function TripMapBase({
   onAlternativePress,
 }: Props) {
   const navigating = routeMode === 'navigate';
+  const markerActive = showMeArrow ?? navigating;
   const cameraDefaults = useMemo(() => ({ centerCoordinate: initialCenter, zoomLevel: 15 }), [initialCenter]);
 
   // While navigating: the first leg is active (blue) and the rest are pink.
@@ -147,16 +150,16 @@ function TripMapBase({
 
   // Circle while planning, triangle while navigating. Both layers exist; one is hidden.
   const meDotStyle = useMemo(
-    () => ({ ...ME_DOT_STYLE, visibility: navigating ? 'none' : 'visible' }) as any,
-    [navigating]
+    () => ({ ...ME_DOT_STYLE, visibility: markerActive ? 'none' : 'visible' }) as any,
+    [markerActive]
   );
   const meHaloStyle = useMemo(
-    () => ({ ...ME_HALO, visibility: navigating ? 'none' : 'visible' }) as any,
-    [navigating]
+    () => ({ ...ME_HALO, visibility: markerActive ? 'none' : 'visible' }) as any,
+    [markerActive]
   );
   const meArrowStyle = useMemo(
-    () => ({ ...ME_ARROW_STYLE, visibility: navigating ? 'visible' : 'none' }) as any,
-    [navigating]
+    () => ({ ...ME_ARROW_STYLE, visibility: markerActive ? 'visible' : 'none' }) as any,
+    [markerActive]
   );
 
   const candidateShape = useMemo(() => (candidate ? pointCollection(candidate) : null), [candidate]);
@@ -207,6 +210,12 @@ function TripMapBase({
     >
       <Mapbox.Camera ref={cameraRef} defaultSettings={cameraDefaults} />
 
+      {altShape && (
+        <Mapbox.ShapeSource id="routeAlternatives" shape={altShape as any} onPress={handleAltPress}>
+          <Mapbox.LineLayer id="routeAlternativeLines" style={ROUTE_UPCOMING} />
+        </Mapbox.ShapeSource>
+      )}
+
       {routeShape && (
         <Mapbox.ShapeSource id="route" shape={routeShape as any}>
           <Mapbox.LineLayer id="routeUpcoming" filter={['==', ['get', 'active'], 0] as any} style={ROUTE_UPCOMING} />
@@ -225,6 +234,7 @@ function TripMapBase({
       <Mapbox.ShapeSource id="stops" shape={stopShape as any} onPress={handleStopPress}>
         <Mapbox.CircleLayer id="stopCircles" style={STOP_CIRCLE} />
         <Mapbox.SymbolLayer id="stopNumbers" style={STOP_NUMBER} />
+        <Mapbox.SymbolLayer id="stopMoves" style={STOP_MOVE} />
         <Mapbox.SymbolLayer id="stopNames" style={showNames ? STOP_NAME : STOP_NAME_HIDDEN} />
       </Mapbox.ShapeSource>
 

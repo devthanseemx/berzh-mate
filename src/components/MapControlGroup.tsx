@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   toggle: {
-    width: 44,
+    width: 56,
     height: 44,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
@@ -65,7 +65,8 @@ const styles = StyleSheet.create({
   controls: {
     alignItems: 'center',
     gap: 6,
-    width: 44,
+    width: 56,
+    paddingHorizontal: 6,
     paddingVertical: 6,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,

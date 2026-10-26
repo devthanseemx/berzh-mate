@@ -92,6 +92,7 @@ export default function Estimate() {
   const [meterError, setMeterError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [topPanelHeight, setTopPanelHeight] = useState(0);
+  const [liveHeaderHeight, setLiveHeaderHeight] = useState(0);
   const [sheetExpanded, setSheetExpanded] = useState(true);
 
   const rate = rates.find((r) => r.id === activeRateId) ?? null;
@@ -382,15 +383,19 @@ export default function Estimate() {
           stops={stops}
           route={route}
           routeMode="plan"
+          showMeArrow={run.status === 'running'}
           me={run.last ?? me}
           candidate={null}
           showNames
         />
-        <MapControlGroup style={{ top: insets.top + 6 }}>
+        <MapControlGroup style={{ top: insets.top + 12 + liveHeaderHeight + 6 }}>
           <MapStyleSwitcher />
           <LocateButton onPress={locateMe} busy={locating} />
         </MapControlGroup>
-        <View style={[styles.liveHeader, { top: insets.top + 12 }]}>
+        <View
+          style={[styles.liveHeader, { top: insets.top + 12 }]}
+          onLayout={(event) => setLiveHeaderHeight(Math.ceil(event.nativeEvent.layout.height))}
+        >
           <Text style={styles.liveHeaderLabel}>
             {run.status === 'running' ? 'METER RUNNING' : 'TRIP COMPLETE'}
           </Text>
@@ -687,8 +692,22 @@ const styles = StyleSheet.create({
   endpointCopy: { flex: 1, minWidth: 0 },
   endpointLabel: { color: colors.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
   endpointValue: { color: colors.text, fontSize: 12, fontWeight: '700', marginTop: 1 },
-  useMyLocation: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, marginBottom: 5, paddingHorizontal: 4 },
-  useMyLocationText: { color: colors.accent, fontSize: 11, fontWeight: '700' },
+  useMyLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 7,
+    marginBottom: 3,
+    marginHorizontal: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  useMyLocationText: { color: colors.success, fontSize: 12, fontWeight: '700' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   sheetHeading: { flex: 1, minWidth: 0, gap: 3 },
   sheetToggle: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.surfaceAlt },

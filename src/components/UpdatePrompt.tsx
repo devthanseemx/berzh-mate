@@ -78,12 +78,14 @@ export function UpdatePrompt({
           )}
           <View style={styles.actions}>
             <AnimatedButton
-              label={downloading ? 'Downloading…' : 'Download & install'}
+              small
+              label={downloading ? 'Downloading…' : 'Install update'}
               onPress={install}
               disabled={!canInstall || downloading}
               style={{ flex: 1 }}
             />
             <AnimatedButton
+              small
               label="Later"
               variant="ghost"
               onPress={onClose}
@@ -109,7 +111,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     maxHeight: '82%',
-    padding: 20,
+    padding: 18,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -132,5 +134,5 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   progressText: { color: colors.primaryStrong, fontSize: 13, fontWeight: '700' },
   warning: { color: colors.danger, fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
 });
