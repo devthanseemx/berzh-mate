@@ -68,6 +68,8 @@ export function UpdateBanner() {
 
 const styles = StyleSheet.create({
   card: {
+    marginHorizontal: 16,
+    marginTop: 12,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: 16,

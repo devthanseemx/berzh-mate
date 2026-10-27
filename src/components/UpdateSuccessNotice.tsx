@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import * as Updates from 'expo-updates';
 import { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AnimatedButton } from './AnimatedButton';
@@ -14,26 +13,14 @@ import {
 } from '../services/updateNotice';
 
 const LAST_VERSION_KEY = 'berzh-mate-last-launched-version';
-const LAST_UPDATE_ID_KEY = 'berzh-mate-last-launched-update-id';
-const PENDING_NOTICE_KEY = 'berzh-mate-pending-update-success';
 const FALLBACK_APK_NOTES = 'The latest version of Berzh Mate has been installed.';
-const FALLBACK_OTA_NOTES = 'The latest in-app improvements and fixes are now active.';
 
-type SuccessNotice = UpdateNoticeDetails & { kind: 'app' | 'in-app' };
+type SuccessNotice = UpdateNoticeDetails;
 
 function isNotice(value: unknown): value is UpdateNoticeDetails {
   if (!value || typeof value !== 'object') return false;
   const notice = value as Partial<UpdateNoticeDetails>;
   return typeof notice.version === 'string' && typeof notice.notes === 'string';
-}
-
-function getManifestMessage(): string | null {
-  const manifest = Updates.manifest;
-  if (!('metadata' in manifest)) return null;
-  const metadata = manifest.metadata;
-  if (!metadata || typeof metadata !== 'object') return null;
-  const message = (metadata as Record<string, unknown>).message;
-  return typeof message === 'string' && message.trim() ? message.trim() : null;
 }
 
 export function UpdateSuccessNotice() {
@@ -42,43 +29,24 @@ export function UpdateSuccessNotice() {
   useEffect(() => {
     let active = true;
     const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
-    const currentUpdateId = Updates.updateId;
 
     const checkForAppliedUpdate = async () => {
       try {
         const values = await AsyncStorage.multiGet([
           LAST_VERSION_KEY,
-          LAST_UPDATE_ID_KEY,
           PENDING_INSTALL_NOTICE_KEY,
-          PENDING_NOTICE_KEY,
         ]);
         const previousVersion = values[0][1];
-        const previousUpdateId = values[1][1];
-        const pendingInstall = values[2][1];
-        const pendingNotice = values[3][1];
+        const pendingInstall = values[1][1];
         let nextNotice: SuccessNotice | null = null;
-
-        if (pendingNotice) {
-          try {
-            const parsed: unknown = JSON.parse(pendingNotice);
-            if (isNotice(parsed) && (parsed as SuccessNotice).kind) {
-              nextNotice = parsed as SuccessNotice;
-            } else {
-              await AsyncStorage.removeItem(PENDING_NOTICE_KEY);
-            }
-          } catch {
-            await AsyncStorage.removeItem(PENDING_NOTICE_KEY);
-          }
-        }
 
         if (pendingInstall) {
           try {
             const parsed: unknown = JSON.parse(pendingInstall);
-            if (!nextNotice && isNotice(parsed) && parsed.version === currentVersion) {
+            if (isNotice(parsed) && parsed.version === currentVersion) {
               nextNotice = {
                 ...parsed,
                 notes: parsed.notes || FALLBACK_APK_NOTES,
-                kind: 'app',
               };
             }
           } catch {
@@ -97,31 +65,12 @@ export function UpdateSuccessNotice() {
           nextNotice = {
             version: currentVersion,
             notes: notes || FALLBACK_APK_NOTES,
-            kind: 'app',
-          };
-        }
-
-        if (
-          !nextNotice &&
-          currentUpdateId &&
-          previousUpdateId &&
-          currentUpdateId !== previousUpdateId &&
-          !Updates.isEmbeddedLaunch
-        ) {
-          nextNotice = {
-            version: currentVersion,
-            notes: getManifestMessage() ?? FALLBACK_OTA_NOTES,
-            kind: 'in-app',
           };
         }
 
         await AsyncStorage.setItem(LAST_VERSION_KEY, currentVersion);
-        if (currentUpdateId) {
-          await AsyncStorage.setItem(LAST_UPDATE_ID_KEY, currentUpdateId);
-        }
 
         if (nextNotice) {
-          await AsyncStorage.setItem(PENDING_NOTICE_KEY, JSON.stringify(nextNotice));
           if (active) setNotice(nextNotice);
         }
       } catch (error: unknown) {
@@ -137,7 +86,6 @@ export function UpdateSuccessNotice() {
 
   const dismiss = async () => {
     try {
-      await AsyncStorage.removeItem(PENDING_NOTICE_KEY);
       setNotice(null);
     } catch (error: unknown) {
       console.warn('Could not dismiss the app-update notice:', error);
@@ -161,9 +109,7 @@ export function UpdateSuccessNotice() {
           <Text style={styles.subtitle}>
             Berzh Mate {notice?.version} has been updated.
           </Text>
-          <Text style={styles.sectionTitle}>
-            {notice?.kind === 'in-app' ? "What's improved" : "What's new"}
-          </Text>
+          <Text style={styles.sectionTitle}>What’s new</Text>
           <ScrollView style={styles.notesScroll} contentContainerStyle={styles.notesContent}>
             <Text style={styles.notes}>{notice?.notes}</Text>
           </ScrollView>
