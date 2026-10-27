@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { MotiView } from 'moti';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PENDING_JOIN_KEY } from '../../services/pendingJoin';
 import { UpdateBanner } from '../../components/UpdateBanner';
 import { SpendingChart, type ChartPeriod } from '../../components/SpendingChart';
+import { DistanceChart } from '../../components/DistanceChart';
 import { VEHICLE_ICON } from '../../components/vehicleIcons';
 import { HOME_PLACE_CATEGORIES, useSavedPlaces } from '../../store/savedPlaces';
 import { HomeSkeleton } from '../../components/HomeSkeleton';
@@ -25,9 +26,10 @@ import { SavedPlacesSheet } from '../../components/SavedPlacesSheet';
 
 function greeting(): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 17) return 'Good afternoon';
+  if (h >= 17 && h < 21) return 'Good evening';
+  return 'Good night';
 }
 
 // One-tile shortcut into each main area of the app.
@@ -61,6 +63,7 @@ function mondayOf(offset: number): Date {
 
 export default function Home() {
   const [firstName, setFirstName] = useState('');
+  const [greetingText, setGreetingText] = useState(greeting);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [rides, setRides] = useState<FareTripRow[]>([]);
@@ -76,6 +79,11 @@ export default function Home() {
   const [savedPlacesOpen, setSavedPlacesOpen] = useState(false);
   const [mapsLinkOpen, setMapsLinkOpen] = useState(false);
   const [mapsLink, setMapsLink] = useState('');
+
+  useEffect(() => {
+    const timer = setInterval(() => setGreetingText(greeting()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Reloads every time the home screen comes back into view, so new trips appear.
   useFocusEffect(
@@ -176,10 +184,8 @@ export default function Home() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>BERZH MATE</Text>
-            <Text style={styles.title}>
-              {greeting()}
-              {firstName ? `, ${firstName}` : ''}
-            </Text>
+            <Text style={styles.greeting}>{greetingText}</Text>
+            {firstName ? <Text style={styles.greetingName}>{firstName}</Text> : null}
           </View>
           <Pressable onPress={() => router.push('/account')}>
             {avatar ? (
@@ -295,6 +301,7 @@ export default function Home() {
         </MotiView>
 
         <SpendingChart period={period} start={rangeStart} end={rangeEnd} />
+        <DistanceChart period={period} start={rangeStart} end={rangeEnd} trips={rangeTrips} />
 
         <View style={styles.sectionRow}>
           <Text style={styles.section}>Recent trips</Text>
@@ -514,7 +521,8 @@ const styles = StyleSheet.create({
   savedPlacesMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   savedChipPressed: { backgroundColor: colors.surfaceAlt },
   kicker: { color: colors.accent, letterSpacing: 3, fontSize: 11, fontWeight: '700', fontFamily: fonts.semibold },
-  title: { color: colors.text, fontSize: 26, fontWeight: '800', marginTop: 4, marginBottom: 2, letterSpacing: -0.4, fontFamily: fonts.extrabold },
+  greeting: { color: colors.text, fontSize: 25, fontWeight: '800', marginTop: 4, letterSpacing: -0.5, fontFamily: fonts.extrabold },
+  greetingName: { color: colors.primaryStrong, fontSize: 16, fontWeight: '700', marginTop: 2, fontFamily: fonts.bold },
   avatar: { width: 46, height: 46, borderRadius: 23 },
   avatarFallback: { backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: colors.accent, fontWeight: '800', fontSize: 18, fontFamily: fonts.extrabold },

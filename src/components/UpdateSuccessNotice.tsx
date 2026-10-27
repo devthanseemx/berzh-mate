@@ -44,9 +44,20 @@ export function UpdateSuccessNotice() {
           try {
             const parsed: unknown = JSON.parse(pendingInstall);
             if (isNotice(parsed) && parsed.version === currentVersion) {
+              const savedNotes = parsed.notes
+                .split(/\r?\n/)
+                .filter((line) => !/full changelog|github\.com\/devthanseemx\/berzh-mate\/compare\//i.test(line))
+                .join('\n')
+                .trim();
+              let releaseNotes = '';
+              try {
+                releaseNotes = await getReleaseNotes(parsed.version);
+              } catch (error: unknown) {
+                console.warn('Could not load detailed release notes:', error);
+              }
               nextNotice = {
                 ...parsed,
-                notes: parsed.notes || FALLBACK_APK_NOTES,
+                notes: releaseNotes || savedNotes || FALLBACK_APK_NOTES,
               };
             }
           } catch {

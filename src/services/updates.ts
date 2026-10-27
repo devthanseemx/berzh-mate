@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getReleaseNotes } from './updateNotice';
 
 const REPO = 'devthanseemx/berzh-mate';
 
@@ -53,9 +54,15 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
     asset.name.toLowerCase().startsWith('berzh-mate-') &&
     asset.name.toLowerCase().endsWith('.apk')
   ) ?? (release.assets ?? []).find((asset) => asset.name.toLowerCase().endsWith('.apk'));
+  let notes = release.body ?? '';
+  try {
+    notes = await getReleaseNotes(tag) || notes;
+  } catch (error: unknown) {
+    console.warn('Could not load detailed release notes:', error);
+  }
   return {
     version: tag.replace(/^v/, ''),
-    notes: release.body ?? '',
+    notes,
     apkUrl: apk?.browser_download_url ?? null,
   };
 }
